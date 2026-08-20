@@ -17,8 +17,10 @@ import cn.liyuyu.fuckwxscan.App
 import cn.liyuyu.fuckwxscan.R
 import cn.liyuyu.fuckwxscan.capture.ScreenCaptureFacade
 import cn.liyuyu.fuckwxscan.gesture.VolumeQuadTapDetector
+import cn.liyuyu.fuckwxscan.overlay.MultiQrOverlayController
 import cn.liyuyu.fuckwxscan.qr.QrDecoder
 import cn.liyuyu.fuckwxscan.result.QrResultDispatcher
+import cn.liyuyu.fuckwxscan.result.ResultHandler
 import cn.liyuyu.fuckwxscan.ui.MainActivity
 import cn.liyuyu.fuckwxscan.utils.BarcodeUtil
 import kotlinx.coroutines.CoroutineScope
@@ -32,6 +34,8 @@ class QrAccessibilityService : AccessibilityService() {
     private val detector = VolumeQuadTapDetector()
     private val serviceScope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
     private val captureFacade by lazy { ScreenCaptureFacade(this) }
+    private val multiQrOverlayControllerDelegate = lazy { MultiQrOverlayController(this) }
+    private val multiQrOverlayController by multiQrOverlayControllerDelegate
 
     private var scanInProgress = false
 
@@ -46,6 +50,9 @@ class QrAccessibilityService : AccessibilityService() {
 
     override fun onInterrupt() {
         detector.reset()
+        if (multiQrOverlayControllerDelegate.isInitialized()) {
+            multiQrOverlayController.dismiss()
+        }
     }
 
     override fun onKeyEvent(event: KeyEvent): Boolean {
@@ -70,6 +77,9 @@ class QrAccessibilityService : AccessibilityService() {
     }
 
     override fun onDestroy() {
+        if (multiQrOverlayControllerDelegate.isInitialized()) {
+            multiQrOverlayController.dismiss()
+        }
         serviceScope.cancel()
         super.onDestroy()
     }
@@ -80,6 +90,9 @@ class QrAccessibilityService : AccessibilityService() {
             return
         }
         if (scanInProgress) {
+            return
+        }
+        if (multiQrOverlayController.isShowing) {
             return
         }
         scanInProgress = true
@@ -96,6 +109,7 @@ class QrAccessibilityService : AccessibilityService() {
                     return@launch
                 }
 
+                var overlayOwnsBitmap = false
                 try {
                     val results = withContext(Dispatchers.Default) {
                         QrDecoder.decode(bitmap)
@@ -107,12 +121,34 @@ class QrAccessibilityService : AccessibilityService() {
                     } else {
                         null
                     }
-                    QrResultDispatcher(this@QrAccessibilityService).dispatch(
-                        results,
-                        screenshotUri,
-                    )
+                    if (results.size > 1) {
+                        overlayOwnsBitmap = multiQrOverlayController.show(
+                            screenshot = bitmap,
+                            results = results,
+                            onSelected = { result ->
+                                ResultHandler(this@QrAccessibilityService).handle(
+                                    result.text,
+                                    screenshotUri,
+                                )
+                            },
+                        )
+                        if (!overlayOwnsBitmap) {
+                            Toast.makeText(
+                                this@QrAccessibilityService,
+                                R.string.qr_selection_overlay_failed,
+                                Toast.LENGTH_SHORT,
+                            ).show()
+                        }
+                    } else {
+                        QrResultDispatcher(this@QrAccessibilityService).dispatch(
+                            results,
+                            screenshotUri,
+                        )
+                    }
                 } finally {
-                    bitmap.recycle()
+                    if (!overlayOwnsBitmap) {
+                        bitmap.recycle()
+                    }
                 }
             } finally {
                 scanInProgress = false
