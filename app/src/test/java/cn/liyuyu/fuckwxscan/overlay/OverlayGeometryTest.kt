@@ -37,4 +37,19 @@ class OverlayGeometryTest {
 
         assertEquals(MarkerPosition(left = 160, top = 300), position)
     }
+
+    @Test
+    fun portraitScreenCenterStaysAlignedOnOddWidthOverlay() {
+        val position = OverlayGeometry.markerTopLeft(
+            centerX = 540f,
+            centerY = 1200f,
+            sourceWidth = 1080,
+            sourceHeight = 2400,
+            targetWidth = 691,
+            targetHeight = 1536,
+            markerSize = 72,
+        )
+
+        assertEquals(MarkerPosition(left = 310, top = 732), position)
+    }
 }
