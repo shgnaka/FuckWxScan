@@ -67,6 +67,7 @@ class MainActivity : ComponentActivity() {
 
     private var accessibilityEnabled by mutableStateOf(false)
     private var autoCopyEnabled by mutableStateOf(false)
+    private var shakeTriggerEnabled by mutableStateOf(false)
     private var legacyProjectionReady by mutableStateOf(false)
     private var diagnosticSnapshot by mutableStateOf(DiagnosticSnapshot.empty())
     private var captureAfterProjectionGrant = false
@@ -114,6 +115,7 @@ class MainActivity : ComponentActivity() {
         }
 
         autoCopyEnabled = AppPreferences.isAutoCopyEnabled(this)
+        shakeTriggerEnabled = AppPreferences.isShakeTriggerEnabled(this)
         legacyProjectionReady = App.screenCaptureIntentResult != null
         refreshDiagnostics()
         showSetupScreen()
@@ -122,6 +124,7 @@ class MainActivity : ComponentActivity() {
     override fun onResume() {
         super.onResume()
         accessibilityEnabled = isAccessibilityServiceEnabled()
+        shakeTriggerEnabled = AppPreferences.isShakeTriggerEnabled(this)
         legacyProjectionReady = App.screenCaptureIntentResult != null
         refreshDiagnostics()
     }
@@ -132,6 +135,7 @@ class MainActivity : ComponentActivity() {
                 SetupScreen(
                     accessibilityEnabled = accessibilityEnabled,
                     autoCopyEnabled = autoCopyEnabled,
+                    shakeTriggerEnabled = shakeTriggerEnabled,
                     legacyProjectionReady = legacyProjectionReady,
                     diagnosticSnapshot = diagnosticSnapshot,
                     onOpenAccessibilitySettings = {
@@ -140,6 +144,10 @@ class MainActivity : ComponentActivity() {
                     onAutoCopyChanged = { enabled ->
                         autoCopyEnabled = enabled
                         AppPreferences.setAutoCopyEnabled(this, enabled)
+                    },
+                    onShakeTriggerChanged = { enabled ->
+                        shakeTriggerEnabled = enabled
+                        AppPreferences.setShakeTriggerEnabled(this, enabled)
                     },
                     onPrepareLegacyCapture = {
                         requestLegacyProjection(startCaptureAfterGrant = false)
@@ -195,10 +203,12 @@ class MainActivity : ComponentActivity() {
 private fun SetupScreen(
     accessibilityEnabled: Boolean,
     autoCopyEnabled: Boolean,
+    shakeTriggerEnabled: Boolean,
     legacyProjectionReady: Boolean,
     diagnosticSnapshot: DiagnosticSnapshot,
     onOpenAccessibilitySettings: () -> Unit,
     onAutoCopyChanged: (Boolean) -> Unit,
+    onShakeTriggerChanged: (Boolean) -> Unit,
     onPrepareLegacyCapture: () -> Unit,
     onRefreshDiagnostics: () -> Unit,
     onCopyDiagnostics: () -> Unit,
@@ -265,6 +275,24 @@ private fun SetupScreen(
                 style = MaterialTheme.typography.body2,
             )
 
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Text(
+                    text = stringResource(R.string.shake_trigger_label),
+                    modifier = Modifier.weight(1f),
+                )
+                Switch(
+                    checked = shakeTriggerEnabled,
+                    onCheckedChange = onShakeTriggerChanged,
+                )
+            }
+            Text(
+                text = stringResource(R.string.shake_trigger_description),
+                style = MaterialTheme.typography.body2,
+            )
+
             if (Build.VERSION.SDK_INT < Build.VERSION_CODES.R) {
                 Divider()
                 Text(
@@ -313,6 +341,18 @@ private fun SetupScreen(
             DiagnosticValue(
                 label = stringResource(R.string.diagnostic_service_state),
                 value = diagnosticSnapshot.serviceState,
+            )
+            DiagnosticValue(
+                label = stringResource(R.string.diagnostic_sensor_state),
+                value = diagnosticSnapshot.sensorState,
+            )
+            DiagnosticValue(
+                label = stringResource(R.string.diagnostic_last_sensor_event),
+                value = diagnosticSnapshot.lastSensorEvent,
+            )
+            DiagnosticValue(
+                label = stringResource(R.string.diagnostic_last_shake),
+                value = diagnosticSnapshot.lastShake,
             )
             DiagnosticValue(
                 label = stringResource(R.string.diagnostic_last_key_event),

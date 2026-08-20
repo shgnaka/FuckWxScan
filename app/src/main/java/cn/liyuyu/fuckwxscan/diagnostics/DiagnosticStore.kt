@@ -18,6 +18,9 @@ import java.util.Locale
 data class DiagnosticSnapshot(
     val serviceConnected: Boolean,
     val serviceState: String,
+    val sensorState: String,
+    val lastSensorEvent: String,
+    val lastShake: String,
     val lastKeyEvent: String,
     val lastQuadTap: String,
     val lastError: String,
@@ -28,6 +31,9 @@ data class DiagnosticSnapshot(
         fun empty() = DiagnosticSnapshot(
             serviceConnected = false,
             serviceState = NOT_RECORDED,
+            sensorState = NOT_RECORDED,
+            lastSensorEvent = NOT_RECORDED,
+            lastShake = NOT_RECORDED,
             lastKeyEvent = NOT_RECORDED,
             lastQuadTap = NOT_RECORDED,
             lastError = NOT_RECORDED,
@@ -45,6 +51,12 @@ object DiagnosticStore {
     private const val KEY_CONNECTED_SESSION = "connected_session"
     private const val KEY_SERVICE_STATE = "service_state"
     private const val KEY_SERVICE_STATE_AT = "service_state_at"
+    private const val KEY_SENSOR_STATE = "sensor_state"
+    private const val KEY_SENSOR_STATE_AT = "sensor_state_at"
+    private const val KEY_LAST_SENSOR_EVENT = "last_sensor_event"
+    private const val KEY_LAST_SENSOR_EVENT_AT = "last_sensor_event_at"
+    private const val KEY_LAST_SHAKE = "last_shake"
+    private const val KEY_LAST_SHAKE_AT = "last_shake_at"
     private const val KEY_LAST_KEY_EVENT = "last_key_event"
     private const val KEY_LAST_KEY_EVENT_AT = "last_key_event_at"
     private const val KEY_LAST_QUAD_TAP = "last_quad_tap"
@@ -114,6 +126,42 @@ object DiagnosticStore {
         }
     }
 
+    fun recordSensorState(context: Context, state: String) {
+        safeRecord {
+            val now = System.currentTimeMillis()
+            preferences(context).edit()
+                .putString(KEY_SENSOR_STATE, state)
+                .putLong(KEY_SENSOR_STATE_AT, now)
+                .apply()
+            appendEvent(context, now, "SENSOR", state, synchronous = false)
+            Log.i(TAG, state)
+        }
+    }
+
+    fun recordSensorSample(context: Context, sample: String) {
+        safeRecord {
+            val now = System.currentTimeMillis()
+            preferences(context).edit()
+                .putString(KEY_LAST_SENSOR_EVENT, sample)
+                .putLong(KEY_LAST_SENSOR_EVENT_AT, now)
+                .apply()
+            Log.d(TAG, sample)
+        }
+    }
+
+    fun recordShake(context: Context) {
+        safeRecord {
+            val now = System.currentTimeMillis()
+            val message = "端末を振る操作を検出"
+            preferences(context).edit()
+                .putString(KEY_LAST_SHAKE, message)
+                .putLong(KEY_LAST_SHAKE_AT, now)
+                .apply()
+            appendEvent(context, now, "GESTURE", message, synchronous = false)
+            Log.i(TAG, message)
+        }
+    }
+
     fun recordStage(context: Context, stage: String) {
         recordEvent(context, "STAGE", stage)
     }
@@ -150,6 +198,21 @@ object DiagnosticStore {
             KEY_SERVICE_STATE,
             KEY_SERVICE_STATE_AT,
         )
+        val sensorState = timedValue(
+            prefs,
+            KEY_SENSOR_STATE,
+            KEY_SENSOR_STATE_AT,
+        )
+        val lastSensorEvent = timedValue(
+            prefs,
+            KEY_LAST_SENSOR_EVENT,
+            KEY_LAST_SENSOR_EVENT_AT,
+        )
+        val lastShake = timedValue(
+            prefs,
+            KEY_LAST_SHAKE,
+            KEY_LAST_SHAKE_AT,
+        )
         val lastKeyEvent = timedValue(
             prefs,
             KEY_LAST_KEY_EVENT,
@@ -173,6 +236,9 @@ object DiagnosticStore {
             connected = connected,
             connectedSession = connectedSession,
             serviceState = serviceState,
+            sensorState = sensorState,
+            lastSensorEvent = lastSensorEvent,
+            lastShake = lastShake,
             lastKeyEvent = lastKeyEvent,
             lastQuadTap = lastQuadTap,
             lastError = lastError,
@@ -182,6 +248,9 @@ object DiagnosticStore {
         DiagnosticSnapshot(
             serviceConnected = connected,
             serviceState = serviceState,
+            sensorState = sensorState,
+            lastSensorEvent = lastSensorEvent,
+            lastShake = lastShake,
             lastKeyEvent = lastKeyEvent,
             lastQuadTap = lastQuadTap,
             lastError = lastError,
@@ -193,6 +262,9 @@ object DiagnosticStore {
         DiagnosticSnapshot(
             serviceConnected = false,
             serviceState = detail,
+            sensorState = NOT_RECORDED,
+            lastSensorEvent = NOT_RECORDED,
+            lastShake = NOT_RECORDED,
             lastKeyEvent = NOT_RECORDED,
             lastQuadTap = NOT_RECORDED,
             lastError = detail,
@@ -287,6 +359,9 @@ object DiagnosticStore {
         connected: Boolean,
         connectedSession: String?,
         serviceState: String,
+        sensorState: String,
+        lastSensorEvent: String,
+        lastShake: String,
         lastKeyEvent: String,
         lastQuadTap: String,
         lastError: String,
@@ -304,6 +379,15 @@ object DiagnosticStore {
         appendLine()
         appendLine("serviceState:")
         appendLine(serviceState)
+        appendLine()
+        appendLine("sensorState:")
+        appendLine(sensorState)
+        appendLine()
+        appendLine("lastSensorEvent:")
+        appendLine(lastSensorEvent)
+        appendLine()
+        appendLine("lastShake:")
+        appendLine(lastShake)
         appendLine()
         appendLine("lastKeyEvent:")
         appendLine(lastKeyEvent)

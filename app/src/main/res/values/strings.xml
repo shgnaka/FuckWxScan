@@ -8,14 +8,16 @@
     <string name="notification_sub_title">画面取得を実行しています</string>
 
     <string name="accessibility_service_name">QR Volume Scanner</string>
-    <string name="accessibility_service_description">音量上ボタンの高速 4 連打で、現在の画面にある QR コードを読み取ります。キー操作は消費せず、通常の音量変更も行われます。</string>
-    <string name="setup_title">QR Volume Scanner（診断版）</string>
-    <string name="setup_description">音量上ボタンを素早く 4 回押すと、現在の画面にある QR コードを読み取ります。</string>
+    <string name="accessibility_service_description">音量上ボタンの高速 4 連打、または設定した振動操作で、現在の画面にある QR コードを読み取ります。音量キー操作は消費せず、通常の音量変更も行われます。</string>
+    <string name="setup_title">QR Volume Scanner（振動診断版）</string>
+    <string name="setup_description">音量上ボタンを素早く 4 回押すか、「振って読み取り」を有効にして端末を一往復振ると、現在の画面にある QR コードを読み取ります。</string>
     <string name="accessibility_status_enabled">ユーザー補助サービス：有効</string>
     <string name="accessibility_status_disabled">ユーザー補助サービス：無効</string>
     <string name="open_accessibility_settings">ユーザー補助設定を開く</string>
     <string name="auto_copy_label">読み取り結果を自動コピー</string>
     <string name="auto_copy_description">初期値は OFF です。URL を開く場合も、ON なら先にコピーします。</string>
+    <string name="shake_trigger_label">振って読み取り（実験）</string>
+    <string name="shake_trigger_description">初期値は OFF です。画面が点灯し、ロックが解除されているときだけ検出します。通知を常駐させずに OPPO 端末でバックグラウンド検出できるか診断します。</string>
     <string name="legacy_capture_ready">画面取得の準備：完了</string>
     <string name="legacy_capture_not_ready">画面取得の準備：未完了</string>
     <string name="prepare_legacy_capture">画面取得を準備する</string>
@@ -36,6 +38,9 @@
     <string name="diagnostic_runtime_connected">サービス実行状態：接続中</string>
     <string name="diagnostic_runtime_disconnected">サービス実行状態：未接続</string>
     <string name="diagnostic_service_state">最後のサービス状態</string>
+    <string name="diagnostic_sensor_state">振動センサーの状態</string>
+    <string name="diagnostic_last_sensor_event">最後の振動センサーイベント</string>
+    <string name="diagnostic_last_shake">最後の振動検出</string>
     <string name="diagnostic_last_key_event">最後の音量上イベント</string>
     <string name="diagnostic_last_quad_tap">最後の 4 連打検出</string>
     <string name="diagnostic_last_error">直前のエラー</string>
