@@ -26,6 +26,9 @@
     <string name="screenshot_failed">画面を取得できませんでした</string>
     <string name="qr_not_found">QR コードが見つかりませんでした</string>
     <string name="cancel">キャンセル</string>
+    <string name="qr_selection_overlay_description">複数の QR コードから読み取り対象を選択</string>
+    <string name="qr_selection_marker_description">QR コード %1$d を選択</string>
+    <string name="qr_selection_overlay_failed">QR コードの選択画面を表示できませんでした</string>
     <string name="clip_label">QR 読み取り結果</string>
     <string name="no_alipay_handler">Alipay を開けませんでした</string>
     <string name="no_url_handler">この URL を開けるアプリがありません</string>
