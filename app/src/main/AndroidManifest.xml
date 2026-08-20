@@ -62,6 +62,14 @@
                 android:name="android.app.lib_name"
                 android:value="" />
         </activity>
+
+        <activity
+            android:name=".ui.QrSelectionActivity"
+            android:excludeFromRecents="true"
+            android:exported="false"
+            android:noHistory="true"
+            android:taskAffinity="${applicationId}.qr_selection"
+            android:theme="@style/Theme.FuckWxScan.Selection" />
         <service
             android:name=".service.CaptureService"
             android:foregroundServiceType="mediaProjection" />

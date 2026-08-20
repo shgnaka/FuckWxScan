@@ -13,7 +13,6 @@ import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
 import android.media.projection.MediaProjectionManager
-import android.net.Uri
 import android.os.Build
 import android.os.Bundle
 import android.provider.Settings
@@ -22,29 +21,15 @@ import androidx.activity.ComponentActivity
 import androidx.activity.OnBackPressedCallback
 import androidx.activity.compose.setContent
 import androidx.activity.result.contract.ActivityResultContracts
-import androidx.compose.animation.core.LinearEasing
-import androidx.compose.animation.core.RepeatMode
-import androidx.compose.animation.core.VectorConverter
-import androidx.compose.animation.core.animateValue
-import androidx.compose.animation.core.infiniteRepeatable
-import androidx.compose.animation.core.rememberInfiniteTransition
-import androidx.compose.animation.core.tween
-import androidx.compose.foundation.Image
-import androidx.compose.foundation.background
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.Button
 import androidx.compose.material.Divider
@@ -58,40 +43,26 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.platform.LocalDensity
-import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
-import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.font.FontFamily
-import androidx.compose.ui.unit.Dp
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import androidx.core.content.ContextCompat
 import androidx.core.view.WindowCompat
 import cn.liyuyu.fuckwxscan.App
 import cn.liyuyu.fuckwxscan.R
-import cn.liyuyu.fuckwxscan.data.BarcodeResult
 import cn.liyuyu.fuckwxscan.diagnostics.DiagnosticSnapshot
 import cn.liyuyu.fuckwxscan.diagnostics.DiagnosticStore
-import cn.liyuyu.fuckwxscan.result.ResultHandler
 import cn.liyuyu.fuckwxscan.service.CaptureService
 import cn.liyuyu.fuckwxscan.service.QrAccessibilityService
 import cn.liyuyu.fuckwxscan.settings.AppPreferences
 import cn.liyuyu.fuckwxscan.ui.theme.FuckWxScanTheme
-import cn.liyuyu.fuckwxscan.ui.theme.HintMask
-import cn.liyuyu.fuckwxscan.utils.ScreenUtil
-import cn.liyuyu.fuckwxscan.utils.parcelable
-import cn.liyuyu.fuckwxscan.utils.parcelableArrayList
 import cn.liyuyu.fuckwxscan.utils.showToast
 
 class MainActivity : ComponentActivity() {
     companion object {
         const val ACTION_REQUEST_LEGACY_CAPTURE =
             "cn.liyuyu.fuckwxscan.action.REQUEST_LEGACY_CAPTURE"
-        const val EXTRA_BARCODE_RESULTS = "extra_barcode_results"
-        const val EXTRA_BARCODE_BITMAP = "extra_barcode_bitmap"
     }
 
     private var accessibilityEnabled by mutableStateOf(false)
@@ -131,18 +102,6 @@ class MainActivity : ComponentActivity() {
                 finish()
             }
         })
-
-        val results = intent.parcelableArrayList<BarcodeResult>(EXTRA_BARCODE_RESULTS)
-        if (!results.isNullOrEmpty()) {
-            if (results.size == 1) {
-                handleText(results.single().text)
-                finish()
-            } else {
-                WindowCompat.setDecorFitsSystemWindows(window, false)
-                showHints(results)
-            }
-            return
-        }
 
         if (intent.action == ACTION_REQUEST_LEGACY_CAPTURE) {
             if (App.screenCaptureIntentResult != null) {
@@ -230,82 +189,6 @@ class MainActivity : ComponentActivity() {
         }
     }
 
-    private fun handleText(text: String) {
-        ResultHandler(this).handle(
-            text,
-            intent.parcelable<Uri>(EXTRA_BARCODE_BITMAP),
-        )
-    }
-
-    private fun showHints(results: List<BarcodeResult>) {
-        setContent {
-            FuckWxScanTheme {
-                Surface(
-                    modifier = Modifier.fillMaxSize(),
-                    color = HintMask,
-                ) {
-                    Box {
-                        val transition = rememberInfiniteTransition()
-                        val currentSize by transition.animateValue(
-                            28.dp,
-                            40.dp,
-                            Dp.VectorConverter,
-                            infiniteRepeatable(
-                                animation = tween(
-                                    durationMillis = 400,
-                                    easing = LinearEasing,
-                                ),
-                                repeatMode = RepeatMode.Reverse,
-                            ),
-                        )
-                        Text(
-                            text = stringResource(R.string.cancel),
-                            color = Color.White,
-                            fontSize = 16.sp,
-                            fontWeight = FontWeight.Bold,
-                            modifier = Modifier
-                                .align(Alignment.TopEnd)
-                                .offset(
-                                    x = (-16).dp,
-                                    y = 16.dp + with(LocalDensity.current) {
-                                        ScreenUtil.getStatusBarHeight(this@MainActivity).toDp()
-                                    },
-                                )
-                                .clickable { finish() },
-                        )
-                        for (result in results) {
-                            Box(
-                                modifier = Modifier
-                                    .offset(
-                                        with(LocalDensity.current) {
-                                            result.centerX.toDp() - 18.dp
-                                        },
-                                        with(LocalDensity.current) {
-                                            result.centerY.toDp() - 18.dp
-                                        },
-                                    )
-                                    .size(36.dp)
-                                    .clickable {
-                                        handleText(result.text)
-                                        finish()
-                                    },
-                                contentAlignment = Alignment.Center,
-                            ) {
-                                Image(
-                                    painter = painterResource(id = R.drawable.ic_wait_click),
-                                    contentDescription = null,
-                                    modifier = Modifier
-                                        .clip(CircleShape)
-                                        .background(Color.White)
-                                        .size(currentSize),
-                                )
-                            }
-                        }
-                    }
-                }
-            }
-        }
-    }
 }
 
 @Composable
