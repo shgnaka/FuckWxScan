@@ -1,5 +1,5 @@
 // Modified by contributors to shgnaka/FuckWxScan in 2026:
-// added unit-test support for the volume gesture detector.
+// added unit-test support for the volume gesture detector and set the fork version.
 plugins {
     id 'com.android.application'
     id 'org.jetbrains.kotlin.android'
@@ -18,8 +18,8 @@ android {
         applicationId "cn.liyuyu.fuckwxscan"
         minSdk 24
         targetSdk 33
-        versionCode 7
-        versionName "1.5.2"
+        versionCode 8
+        versionName "2.0.0"
 
         vectorDrawables {
             useSupportLibrary true
