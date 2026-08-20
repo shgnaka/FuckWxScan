@@ -1,3 +1,8 @@
+/*
+ * Modified from li-yu/FuckWxScan by contributors to shgnaka/FuckWxScan in 2026.
+ * Changes: legacy-only capture path and shared QR decode/result dispatching.
+ * SPDX-License-Identifier: Apache-2.0
+ */
 package cn.liyuyu.fuckwxscan.service
 
 import android.annotation.SuppressLint
@@ -13,14 +18,16 @@ import android.media.projection.MediaProjection
 import android.media.projection.MediaProjectionManager
 import android.os.Build
 import android.os.IBinder
+import android.util.Log
+import android.widget.Toast
 import androidx.core.app.NotificationCompat
 import cn.liyuyu.fuckwxscan.App
 import cn.liyuyu.fuckwxscan.R
-import cn.liyuyu.fuckwxscan.data.BarcodeResult
+import cn.liyuyu.fuckwxscan.qr.QrDecoder
+import cn.liyuyu.fuckwxscan.result.QrResultDispatcher
 import cn.liyuyu.fuckwxscan.ui.MainActivity
 import cn.liyuyu.fuckwxscan.utils.BarcodeUtil
 import cn.liyuyu.fuckwxscan.utils.ScreenUtil
-import cn.liyuyu.fuckwxscan.utils.toBarcodeResult
 import kotlinx.coroutines.*
 
 
@@ -35,7 +42,7 @@ class CaptureService : Service(), CoroutineScope by MainScope() {
             MEDIA_PROJECTION_SERVICE
         ) as MediaProjectionManager
     }
-    private val imageReader by lazy {
+    private val imageReaderDelegate = lazy {
         val (width, height) = ScreenUtil.getScreenSize(this)
         ImageReader.newInstance(
             width,
@@ -44,8 +51,10 @@ class CaptureService : Service(), CoroutineScope by MainScope() {
             1
         )
     }
+    private val imageReader by imageReaderDelegate
     private var mediaProjection: MediaProjection? = null
     private var virtualDisplay: VirtualDisplay? = null
+    private var captureInProgress = false
 
     override fun onBind(intent: Intent?): IBinder? {
         return null
@@ -56,55 +65,116 @@ class CaptureService : Service(), CoroutineScope by MainScope() {
     }
 
     private fun startCapture() {
-        if (App.screenCaptureIntentResult == null) {
+        if (captureInProgress) {
+            return
+        }
+
+        val permissionData = App.screenCaptureIntentResult
+        if (permissionData == null) {
+            requestProjectionPermission()
             return
         }
         if (mediaProjection == null) {
-            mediaProjection = mediaProjectionManager.getMediaProjection(
-                Activity.RESULT_OK,
-                App.screenCaptureIntentResult!!
-            )
+            mediaProjection = runCatching {
+                mediaProjectionManager.getMediaProjection(
+                    Activity.RESULT_OK,
+                    permissionData,
+                )
+            }.onFailure { error ->
+                Log.e(TAG, "Unable to restore MediaProjection", error)
+            }.getOrNull()
         }
-        if (mediaProjection == null) {
+        val projection = mediaProjection
+        if (projection == null) {
+            requestProjectionPermission()
             return
         }
         val (screenWidth, screenHeight) = ScreenUtil.getScreenSize(this)
-        virtualDisplay = mediaProjection!!.createVirtualDisplay(
-            "ScreenCapture",
-            screenWidth, screenHeight, ScreenUtil.getScreenDensityDpi(),
-            DisplayManager.VIRTUAL_DISPLAY_FLAG_AUTO_MIRROR,
-            imageReader.surface, null, null
-        )
-        launch(Dispatchers.IO) {
-            delay(200)
-            val image = withTimeoutOrNull(1000) {
-                var latestImage = imageReader.acquireLatestImage()
-                while (latestImage == null) {
-                    latestImage = imageReader.acquireLatestImage()
-                }
-                return@withTimeoutOrNull latestImage
-            } ?: return@launch
-            val bitmap = BarcodeUtil.imageToBitmap(image)
-            val resultArray = withTimeoutOrNull(2000) { BarcodeUtil.decodeQRCode(bitmap) }
-            val bitmapUri = BarcodeUtil.getBitmapUri(bitmap, this@CaptureService)
-            withContext(Dispatchers.Main) {
-                val intent = Intent(this@CaptureService, MainActivity::class.java)
-                intent.putParcelableArrayListExtra(
-                    MainActivity.EXTRA_BARCODE_RESULTS,
-                    resultArray?.map { it.toBarcodeResult() }?.toCollection(ArrayList())
-                        ?: arrayListOf(
-                            BarcodeResult("未识别到二维码", 0f, 0f)
-                        )
-                )
-                intent.putExtra(MainActivity.EXTRA_BARCODE_BITMAP, bitmapUri)
-                intent.flags = Intent.FLAG_ACTIVITY_NEW_TASK
-                startActivity(intent)
-            }
-            // stop
-            virtualDisplay?.release()
-            virtualDisplay = null
-            this@CaptureService.stopSelf()
+        virtualDisplay = runCatching {
+            projection.createVirtualDisplay(
+                "ScreenCapture",
+                screenWidth, screenHeight, ScreenUtil.getScreenDensityDpi(),
+                DisplayManager.VIRTUAL_DISPLAY_FLAG_AUTO_MIRROR,
+                imageReader.surface, null, null
+            )
+        }.onFailure { error ->
+            Log.e(TAG, "Unable to create MediaProjection display", error)
+        }.getOrNull()
+        if (virtualDisplay == null) {
+            requestProjectionPermission()
+            return
         }
+
+        captureInProgress = true
+        launch(Dispatchers.IO) {
+            try {
+                delay(200)
+                val image = withTimeoutOrNull(1000) {
+                    var latestImage = imageReader.acquireLatestImage()
+                    while (latestImage == null) {
+                        delay(16)
+                        latestImage = imageReader.acquireLatestImage()
+                    }
+                    latestImage
+                }
+                if (image == null) {
+                    withContext(Dispatchers.Main) {
+                        Toast.makeText(
+                            this@CaptureService,
+                            R.string.screenshot_failed,
+                            Toast.LENGTH_SHORT,
+                        ).show()
+                    }
+                    return@launch
+                }
+                val bitmap = BarcodeUtil.imageToBitmap(image)
+                try {
+                    val results = withTimeoutOrNull(2000) { QrDecoder.decode(bitmap) }.orEmpty()
+                    val bitmapUri = if (QrResultDispatcher.needsScreenshotFile(results)) {
+                        BarcodeUtil.getBitmapUri(bitmap, this@CaptureService)
+                    } else {
+                        null
+                    }
+                    withContext(Dispatchers.Main) {
+                        QrResultDispatcher(this@CaptureService).dispatch(results, bitmapUri)
+                    }
+                } finally {
+                    bitmap.recycle()
+                }
+            } catch (error: CancellationException) {
+                throw error
+            } catch (error: Exception) {
+                Log.e(TAG, "Legacy screen capture failed", error)
+                withContext(Dispatchers.Main) {
+                    Toast.makeText(
+                        this@CaptureService,
+                        R.string.screenshot_failed,
+                        Toast.LENGTH_SHORT,
+                    ).show()
+                }
+            } finally {
+                virtualDisplay?.release()
+                virtualDisplay = null
+                captureInProgress = false
+                this@CaptureService.stopSelf()
+            }
+        }
+    }
+
+    private fun requestProjectionPermission() {
+        App.screenCaptureIntentResult = null
+        Toast.makeText(this, R.string.legacy_capture_permission_needed, Toast.LENGTH_LONG).show()
+        runCatching {
+            startActivity(
+                Intent(this, MainActivity::class.java).apply {
+                    action = MainActivity.ACTION_REQUEST_LEGACY_CAPTURE
+                    flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP
+                },
+            )
+        }.onFailure { error ->
+            Log.e(TAG, "Unable to request MediaProjection permission", error)
+        }
+        stopSelf()
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
@@ -117,8 +187,20 @@ class CaptureService : Service(), CoroutineScope by MainScope() {
     }
 
     override fun onDestroy() {
+        cancel()
+        virtualDisplay?.release()
+        virtualDisplay = null
+        runCatching { mediaProjection?.stop() }
+        mediaProjection = null
+        if (imageReaderDelegate.isInitialized()) {
+            imageReader.close()
+        }
         foregroundService.stopForegroundNotification()
         super.onDestroy()
+    }
+
+    companion object {
+        private const val TAG = "CaptureService"
     }
 }
 
