@@ -1,48 +1,58 @@
-# 扫你码
+<!--
+  Modified from li-yu/FuckWxScan by contributors to shgnaka/FuckWxScan in 2026.
+  The original side-bar-launch documentation was replaced for the volume gesture fork.
+-->
+# QR Volume Scanner
 
-> 一个可能让你在微信里更舒服地扫码小工具。
+Android に「画面内の QR コードを読む」ための物理ショートカットを追加するユーティリティです。
+音量上ボタンを高速で 4 回押すと、現在表示されている画面を取得し、端末内で QR コードを認識します。
 
-#### 最新版下载地址 ----> 前往 [Releases](https://github.com/li-yu/FuckWxScan/releases)
+このプロジェクトは [li-yu/FuckWxScan](https://github.com/li-yu/FuckWxScan) のフォークです。
+既存の MediaProjection、ZXing デコード、複数 QR 選択 UI を再利用しつつ、AccessibilityService による物理ジェスチャーを追加しています。
 
-当我们在微信里吃瓜，或者查看朋友分享的一些好东西时：
+> [!WARNING]
+> 現在は開発中です。実機テスト前のため、日常利用向けのリリースはまだありません。
 
-![](https://liyuyu.cn/post-images/1666079643926.png)
+## 現在の実装
 
-![](https://liyuyu.cn/post-images/1666079700885.jpg)
+- 音量上ボタンの高速 4 連打を検出
+- 各タップ間隔 100 ms 以下、全体 300 ms 以下
+- 長押しの repeat イベント、別キー、不正な DOWN / UP 順序を除外
+- キーイベントを消費せず、Android 標準の音量操作を維持
+- Android 11 以降は AccessibilityService.takeScreenshot()
+- Android 7〜10 は既存 MediaProjection をフォールバック利用
+- 既存 ZXing の複数 QR、反転、明度補正デコードを再利用
+- 0 件、1 件、複数件の結果処理
+- URL 起動、プレーンテキスト表示、自動コピー設定
+- ユーザー補助サービスと旧 Android 用画面取得の初期設定画面
 
-长按识别二维码后，经常会遇到以下几种情况，这严重影响我们的使用体验：
+## セットアップ
 
-![](https://liyuyu.cn/post-images/1666079654653.jpg)
+1. アプリをインストールして起動します。
+2. 「ユーザー補助設定を開く」を押し、`QR Volume Scanner` を有効にします。
+3. Android 7〜10 では、アプリに戻って「画面取得を準備する」も実行します。
+4. QR コードが表示された状態で、音量上ボタンを素早く 4 回押します。
 
-![](https://liyuyu.cn/post-images/1666079705007.jpg)
+通常の音量イベントは Android に渡すため、MVP では音量も 4 段上がります。また、音量パネルがスクリーンショットへ写り込む可能性があります。
 
-此时我们只能保存图片到本地，然后再打开对应 App 去识别这些二维码。如此繁琐的操作背后，究其原因无非就是大厂的生态壁垒以及国内互联网的内容审查，有没有一种更加快捷的方式，实现即时在屏幕上扫码，也不局限于微信？答案是有的。
+## 対応範囲
 
-#### 技术原理
+| Android | API | 画面取得 |
+|---|---:|---|
+| 7〜10 | 24〜29 | MediaProjection |
+| 11 以降 | 30 以降 | AccessibilityService.takeScreenshot() |
 
-利用录屏 MediaProjection 获取到当前屏幕画面，然后 ZXing 识别其中的二维码，最后打开网页，一气呵成。理想和现实的差距就体现在：如何在微信里一触即发？
+`minSdk 24`、`compileSdk 33`、`targetSdk 33` を維持したまま機能改造を進めています。SDK とビルドツールの更新は、MVP の実機確認後に別変更として行う方針です。
 
-- 悬浮窗按钮（可以实现，但是涉及权限和视觉污染，有点不妥）
+## プライバシー
 
-- 通知栏常驻（可以实现，但下拉通知栏然后再点按，差点意思）
+QR デコード自体は ZXing により端末内で完結し、このアプリ独自のサーバーへ画像や結果を送信しません。複数 QR の選択や Alipay 互換経路に必要な場合は、アプリ専用領域へスクリーンショットを保存します。Alipay 互換経路を選んだ場合は、その画像を Alipay アプリへ明示的に引き渡します。また、URL を開いた後の通信とデータ処理は遷移先アプリの規約に従います。
 
-- 摇一摇触发（可以实现，但涉及应用保活以及其他应用冲突问题）
+## 開発資料
 
-- 侧边栏快速启动（堪称国产 ROM 一绝，从我自己使用的 OriginOS Ocean 到测试机的 MIUI 13，都是支持的，用过这一功能，iPhone 真的就回不去了）
+- [設計と未決定事項](docs/DESIGN.md)
+- [権利・ライセンス整理](docs/RIGHTS_AND_LICENSES.md)
 
-其实还有类似的“悬浮球”功能也能快速打开指定 App，每家手机系统可能实现不一，但是原理都是一致的。
+## ライセンス
 
-各大 App 分享的图片二维码内容几乎都是 URL，我们只要调起外部浏览器打开就能突破微信的限制，实现吃瓜自由。由于 Android 11（API 30）调整了软件包可见性，当应用 targetSdkVersion >= 30 时，需要在清单文件中添加 `<queries>` 元素进行适配，否则无法调起外部浏览器。
-
-最后把 Activity 的背景色改为透明，修改默认的进入和退出动画，这样在打开时就不会有明显的割裂感了，堪称完美，一个全新的 **“扫你码”** App 就此诞生。
-
-#### 使用方法
-
-1. [Releases](https://github.com/li-yu/FuckWxScan/releases) 页面安装最新版本，并把 App 加入侧边栏快速启动，具体方法每家系统大同小异。
-2. 在需要扫码的界面，通过侧边栏打开**扫你码**，冷启动时屏幕会有提示，点击“立即开始”即可，后面再次扫码不会有提示。
-3. 当识别到单个二维码后，会有吐司提示，并直接通过外部浏览器打开。
-4. 当识别到多个二维码时，会有蒙版提示，选择其一打开。
-
-#### 演示效果
-
-![](https://liyuyu.cn/post-images/1666079552632.gif)
+元の `LICENSE` を変更せず維持し、本フォークも Apache License 2.0 の条件に従います。再利用箇所、変更表示、依存ライセンス、配布時の確認事項は [権利・ライセンス整理](docs/RIGHTS_AND_LICENSES.md) を参照してください。
