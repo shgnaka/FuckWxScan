@@ -7,6 +7,8 @@ package cn.liyuyu.fuckwxscan.ui
 
 import android.accessibilityservice.AccessibilityServiceInfo
 import android.app.Activity
+import android.content.ClipData
+import android.content.ClipboardManager
 import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
@@ -41,7 +43,9 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.Button
 import androidx.compose.material.Divider
 import androidx.compose.material.MaterialTheme
@@ -60,6 +64,7 @@ import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -68,6 +73,8 @@ import androidx.core.view.WindowCompat
 import cn.liyuyu.fuckwxscan.App
 import cn.liyuyu.fuckwxscan.R
 import cn.liyuyu.fuckwxscan.data.BarcodeResult
+import cn.liyuyu.fuckwxscan.diagnostics.DiagnosticSnapshot
+import cn.liyuyu.fuckwxscan.diagnostics.DiagnosticStore
 import cn.liyuyu.fuckwxscan.result.ResultHandler
 import cn.liyuyu.fuckwxscan.service.CaptureService
 import cn.liyuyu.fuckwxscan.service.QrAccessibilityService
@@ -90,6 +97,7 @@ class MainActivity : ComponentActivity() {
     private var accessibilityEnabled by mutableStateOf(false)
     private var autoCopyEnabled by mutableStateOf(false)
     private var legacyProjectionReady by mutableStateOf(false)
+    private var diagnosticSnapshot by mutableStateOf(DiagnosticSnapshot.empty())
     private var captureAfterProjectionGrant = false
 
     private val projectionPermissionLauncher = registerForActivityResult(
@@ -148,6 +156,7 @@ class MainActivity : ComponentActivity() {
 
         autoCopyEnabled = AppPreferences.isAutoCopyEnabled(this)
         legacyProjectionReady = App.screenCaptureIntentResult != null
+        refreshDiagnostics()
         showSetupScreen()
     }
 
@@ -155,6 +164,7 @@ class MainActivity : ComponentActivity() {
         super.onResume()
         accessibilityEnabled = isAccessibilityServiceEnabled()
         legacyProjectionReady = App.screenCaptureIntentResult != null
+        refreshDiagnostics()
     }
 
     private fun showSetupScreen() {
@@ -164,6 +174,7 @@ class MainActivity : ComponentActivity() {
                     accessibilityEnabled = accessibilityEnabled,
                     autoCopyEnabled = autoCopyEnabled,
                     legacyProjectionReady = legacyProjectionReady,
+                    diagnosticSnapshot = diagnosticSnapshot,
                     onOpenAccessibilitySettings = {
                         startActivity(Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS))
                     },
@@ -174,6 +185,8 @@ class MainActivity : ComponentActivity() {
                     onPrepareLegacyCapture = {
                         requestLegacyProjection(startCaptureAfterGrant = false)
                     },
+                    onRefreshDiagnostics = ::refreshDiagnostics,
+                    onCopyDiagnostics = ::copyDiagnostics,
                 )
             }
         }
@@ -187,6 +200,22 @@ class MainActivity : ComponentActivity() {
 
     private fun startLegacyCapture() {
         ContextCompat.startForegroundService(this, Intent(this, CaptureService::class.java))
+    }
+
+    private fun refreshDiagnostics() {
+        diagnosticSnapshot = DiagnosticStore.snapshot(this)
+    }
+
+    private fun copyDiagnostics() {
+        refreshDiagnostics()
+        val clipboard = getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
+        clipboard.setPrimaryClip(
+            ClipData.newPlainText(
+                getString(R.string.diagnostic_clip_label),
+                diagnosticSnapshot.report,
+            ),
+        )
+        showToast(getString(R.string.diagnostic_copied))
     }
 
     private fun isAccessibilityServiceEnabled(): Boolean {
@@ -284,16 +313,21 @@ private fun SetupScreen(
     accessibilityEnabled: Boolean,
     autoCopyEnabled: Boolean,
     legacyProjectionReady: Boolean,
+    diagnosticSnapshot: DiagnosticSnapshot,
     onOpenAccessibilitySettings: () -> Unit,
     onAutoCopyChanged: (Boolean) -> Unit,
     onPrepareLegacyCapture: () -> Unit,
+    onRefreshDiagnostics: () -> Unit,
+    onCopyDiagnostics: () -> Unit,
 ) {
     Surface(
         modifier = Modifier.fillMaxSize(),
         color = MaterialTheme.colors.background,
     ) {
         Column(
-            modifier = Modifier.padding(24.dp),
+            modifier = Modifier
+                .verticalScroll(rememberScrollState())
+                .padding(24.dp),
             verticalArrangement = Arrangement.spacedBy(16.dp),
         ) {
             Text(
@@ -372,7 +406,76 @@ private fun SetupScreen(
                 }
             }
 
+            Divider()
+            Text(
+                text = stringResource(R.string.diagnostic_title),
+                style = MaterialTheme.typography.h6,
+                fontWeight = FontWeight.Bold,
+            )
+            Text(
+                text = stringResource(
+                    if (diagnosticSnapshot.serviceConnected) {
+                        R.string.diagnostic_runtime_connected
+                    } else {
+                        R.string.diagnostic_runtime_disconnected
+                    },
+                ),
+                color = if (diagnosticSnapshot.serviceConnected) {
+                    MaterialTheme.colors.primary
+                } else {
+                    MaterialTheme.colors.error
+                },
+                fontWeight = FontWeight.Bold,
+            )
+            DiagnosticValue(
+                label = stringResource(R.string.diagnostic_service_state),
+                value = diagnosticSnapshot.serviceState,
+            )
+            DiagnosticValue(
+                label = stringResource(R.string.diagnostic_last_key_event),
+                value = diagnosticSnapshot.lastKeyEvent,
+            )
+            DiagnosticValue(
+                label = stringResource(R.string.diagnostic_last_quad_tap),
+                value = diagnosticSnapshot.lastQuadTap,
+            )
+            DiagnosticValue(
+                label = stringResource(R.string.diagnostic_last_error),
+                value = diagnosticSnapshot.lastError,
+            )
+            Button(
+                onClick = onRefreshDiagnostics,
+                modifier = Modifier.fillMaxWidth(),
+            ) {
+                Text(stringResource(R.string.refresh_diagnostics))
+            }
+            Button(
+                onClick = onCopyDiagnostics,
+                modifier = Modifier.fillMaxWidth(),
+            ) {
+                Text(stringResource(R.string.copy_diagnostics))
+            }
+            Text(
+                text = stringResource(R.string.diagnostic_recent_events),
+                fontWeight = FontWeight.Bold,
+            )
+            Text(
+                text = diagnosticSnapshot.recentEvents,
+                style = MaterialTheme.typography.caption,
+                fontFamily = FontFamily.Monospace,
+            )
+
             Spacer(modifier = Modifier.height(8.dp))
         }
     }
+}
+
+@Composable
+private fun DiagnosticValue(label: String, value: String) {
+    Text(text = label, fontWeight = FontWeight.Bold)
+    Text(
+        text = value,
+        style = MaterialTheme.typography.body2,
+        fontFamily = FontFamily.Monospace,
+    )
 }

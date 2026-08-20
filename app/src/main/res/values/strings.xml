@@ -9,7 +9,7 @@
 
     <string name="accessibility_service_name">QR Volume Scanner</string>
     <string name="accessibility_service_description">音量上ボタンの高速 4 連打で、現在の画面にある QR コードを読み取ります。キー操作は消費せず、通常の音量変更も行われます。</string>
-    <string name="setup_title">QR Volume Scanner</string>
+    <string name="setup_title">QR Volume Scanner（診断版）</string>
     <string name="setup_description">音量上ボタンを素早く 4 回押すと、現在の画面にある QR コードを読み取ります。</string>
     <string name="accessibility_status_enabled">ユーザー補助サービス：有効</string>
     <string name="accessibility_status_disabled">ユーザー補助サービス：無効</string>
@@ -29,4 +29,16 @@
     <string name="clip_label">QR 読み取り結果</string>
     <string name="no_alipay_handler">Alipay を開けませんでした</string>
     <string name="no_url_handler">この URL を開けるアプリがありません</string>
+    <string name="diagnostic_title">端末内診断</string>
+    <string name="diagnostic_runtime_connected">サービス実行状態：接続中</string>
+    <string name="diagnostic_runtime_disconnected">サービス実行状態：未接続</string>
+    <string name="diagnostic_service_state">最後のサービス状態</string>
+    <string name="diagnostic_last_key_event">最後の音量上イベント</string>
+    <string name="diagnostic_last_quad_tap">最後の 4 連打検出</string>
+    <string name="diagnostic_last_error">直前のエラー</string>
+    <string name="diagnostic_recent_events">最近の処理記録</string>
+    <string name="refresh_diagnostics">診断情報を更新</string>
+    <string name="copy_diagnostics">診断情報をコピー</string>
+    <string name="diagnostic_clip_label">QR Volume Scanner 診断情報</string>
+    <string name="diagnostic_copied">診断情報をコピーしました</string>
 </resources>

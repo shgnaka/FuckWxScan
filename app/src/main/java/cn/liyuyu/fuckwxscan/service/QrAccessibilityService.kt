@@ -16,6 +16,7 @@ import androidx.core.content.ContextCompat
 import cn.liyuyu.fuckwxscan.App
 import cn.liyuyu.fuckwxscan.R
 import cn.liyuyu.fuckwxscan.capture.ScreenCaptureFacade
+import cn.liyuyu.fuckwxscan.diagnostics.DiagnosticStore
 import cn.liyuyu.fuckwxscan.gesture.VolumeQuadTapDetector
 import cn.liyuyu.fuckwxscan.qr.QrDecoder
 import cn.liyuyu.fuckwxscan.result.QrResultDispatcher
@@ -35,10 +36,29 @@ class QrAccessibilityService : AccessibilityService() {
 
     private var scanInProgress = false
 
+    override fun onCreate() {
+        DiagnosticStore.markServiceStarting(this, "onCreate 開始")
+        try {
+            super.onCreate()
+            DiagnosticStore.recordStage(this, "AccessibilityService.onCreate 完了")
+        } catch (error: Throwable) {
+            DiagnosticStore.recordError(this, "AccessibilityService.onCreate", error)
+            throw error
+        }
+    }
+
     override fun onServiceConnected() {
-        super.onServiceConnected()
-        serviceInfo = serviceInfo.apply {
-            flags = flags or AccessibilityServiceInfo.FLAG_REQUEST_FILTER_KEY_EVENTS
+        DiagnosticStore.markServiceStarting(this, "onServiceConnected 開始")
+        try {
+            super.onServiceConnected()
+            DiagnosticStore.recordStage(this, "serviceInfo 更新開始")
+            serviceInfo = serviceInfo.apply {
+                flags = flags or AccessibilityServiceInfo.FLAG_REQUEST_FILTER_KEY_EVENTS
+            }
+            DiagnosticStore.markServiceConnected(this)
+        } catch (error: Throwable) {
+            DiagnosticStore.recordError(this, "AccessibilityService.onServiceConnected", error)
+            throw error
         }
     }
 
@@ -46,9 +66,21 @@ class QrAccessibilityService : AccessibilityService() {
 
     override fun onInterrupt() {
         detector.reset()
+        DiagnosticStore.recordStage(this, "AccessibilityService.onInterrupt")
     }
 
     override fun onKeyEvent(event: KeyEvent): Boolean {
+        if (event.keyCode == KeyEvent.KEYCODE_VOLUME_UP) {
+            val actionName = when (event.action) {
+                KeyEvent.ACTION_DOWN -> "DOWN"
+                KeyEvent.ACTION_UP -> "UP"
+                else -> "OTHER(${event.action})"
+            }
+            DiagnosticStore.recordKeyEvent(
+                this,
+                "VOLUME_UP $actionName repeat=${event.repeatCount} eventTime=${event.eventTime}",
+            )
+        }
         val action = when (event.action) {
             KeyEvent.ACTION_DOWN -> VolumeQuadTapDetector.Action.DOWN
             KeyEvent.ACTION_UP -> VolumeQuadTapDetector.Action.UP
@@ -62,6 +94,7 @@ class QrAccessibilityService : AccessibilityService() {
         )
         if (detected) {
             Log.i(TAG, "Volume Up quad tap detected")
+            DiagnosticStore.recordQuadTap(this)
             scanCurrentScreen()
         }
 
@@ -70,24 +103,29 @@ class QrAccessibilityService : AccessibilityService() {
     }
 
     override fun onDestroy() {
+        DiagnosticStore.markServiceStopped(this, "サービス破棄（onDestroy）")
         serviceScope.cancel()
         super.onDestroy()
     }
 
     private fun scanCurrentScreen() {
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.R) {
+            DiagnosticStore.recordStage(this, "旧方式の画面取得を開始")
             triggerLegacyCapture()
             return
         }
         if (scanInProgress) {
+            DiagnosticStore.recordStage(this, "画面取得を省略：処理中")
             return
         }
         scanInProgress = true
+        DiagnosticStore.recordStage(this, "AccessibilityService.takeScreenshot 開始")
 
         serviceScope.launch {
             try {
                 val bitmap = captureFacade.capture().getOrElse { error ->
                     Log.e(TAG, "Unable to capture current screen", error)
+                    DiagnosticStore.recordError(this@QrAccessibilityService, "画面取得", error)
                     Toast.makeText(
                         this@QrAccessibilityService,
                         R.string.screenshot_failed,
@@ -95,11 +133,16 @@ class QrAccessibilityService : AccessibilityService() {
                     ).show()
                     return@launch
                 }
+                DiagnosticStore.recordStage(this@QrAccessibilityService, "画面取得成功")
 
                 try {
                     val results = withContext(Dispatchers.Default) {
                         QrDecoder.decode(bitmap)
                     }
+                    DiagnosticStore.recordStage(
+                        this@QrAccessibilityService,
+                        "QR デコード完了：${results.size} 件",
+                    )
                     val screenshotUri = if (QrResultDispatcher.needsScreenshotFile(results)) {
                         withContext(Dispatchers.IO) {
                             BarcodeUtil.getBitmapUri(bitmap, this@QrAccessibilityService)
@@ -111,9 +154,13 @@ class QrAccessibilityService : AccessibilityService() {
                         results,
                         screenshotUri,
                     )
+                    DiagnosticStore.recordStage(this@QrAccessibilityService, "結果処理完了")
                 } finally {
                     bitmap.recycle()
                 }
+            } catch (error: Throwable) {
+                DiagnosticStore.recordError(this@QrAccessibilityService, "画面読み取り処理", error)
+                throw error
             } finally {
                 scanInProgress = false
             }
