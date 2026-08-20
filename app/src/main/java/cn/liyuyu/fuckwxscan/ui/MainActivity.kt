@@ -351,6 +351,14 @@ private fun SetupScreen(
                 value = diagnosticSnapshot.lastSensorEvent,
             )
             DiagnosticValue(
+                label = stringResource(R.string.diagnostic_max_shake_acceleration),
+                value = diagnosticSnapshot.maxShakeAcceleration,
+            )
+            DiagnosticValue(
+                label = stringResource(R.string.diagnostic_last_shake_decision),
+                value = diagnosticSnapshot.lastShakeDecision,
+            )
+            DiagnosticValue(
                 label = stringResource(R.string.diagnostic_last_shake),
                 value = diagnosticSnapshot.lastShake,
             )

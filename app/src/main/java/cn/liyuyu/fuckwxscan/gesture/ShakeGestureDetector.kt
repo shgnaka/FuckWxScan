@@ -20,6 +20,26 @@ class ShakeGestureDetector(
     private val maxOpposingCosine: Float = DEFAULT_MAX_OPPOSING_COSINE,
     private val cooldownMs: Long = DEFAULT_COOLDOWN_MS,
 ) {
+    enum class DiagnosticStage {
+        FIRST_PEAK,
+        REARMED,
+        EXPIRED,
+        RESTARTED_AFTER_TIMEOUT,
+        TOO_SOON,
+        DIRECTION_REJECTED,
+        DETECTED,
+    }
+
+    data class DiagnosticEvent(
+        val sequence: Long,
+        val stage: DiagnosticStage,
+        val sampleMagnitudeMps2: Float,
+        val firstPeakMagnitudeMps2: Float? = null,
+        val secondPeakMagnitudeMps2: Float? = null,
+        val separationMs: Long? = null,
+        val cosine: Float? = null,
+    )
+
     private data class Peak(
         val x: Float,
         val y: Float,
@@ -32,6 +52,10 @@ class ShakeGestureDetector(
     private var peakArmed = true
     private var cooldownUntilMs = UNSET_TIME
     private var lastSampleTimeMs = UNSET_TIME
+    private var diagnosticSequence = 0L
+
+    var lastDiagnosticEvent: DiagnosticEvent? = null
+        private set
 
     init {
         require(peakThresholdMps2 > 0f)
@@ -59,15 +83,40 @@ class ShakeGestureDetector(
         }
 
         val existingPeak = firstPeak
-        if (existingPeak != null && eventTimeMs - existingPeak.timeMs > maxPeakSeparationMs) {
+        val expiredPeak = existingPeak?.takeIf {
+            eventTimeMs - it.timeMs > maxPeakSeparationMs
+        }
+        if (expiredPeak != null) {
             firstPeak = null
         }
 
         if (magnitude <= releaseThresholdMps2) {
+            val wasArmed = peakArmed
             peakArmed = true
+            when {
+                expiredPeak != null -> recordDiagnostic(
+                    stage = DiagnosticStage.EXPIRED,
+                    sampleMagnitudeMps2 = magnitude,
+                    firstPeak = expiredPeak,
+                    separationMs = eventTimeMs - expiredPeak.timeMs,
+                )
+                !wasArmed && firstPeak != null -> recordDiagnostic(
+                    stage = DiagnosticStage.REARMED,
+                    sampleMagnitudeMps2 = magnitude,
+                    firstPeak = firstPeak,
+                )
+            }
             return false
         }
         if (!peakArmed || magnitude < peakThresholdMps2) {
+            if (expiredPeak != null) {
+                recordDiagnostic(
+                    stage = DiagnosticStage.EXPIRED,
+                    sampleMagnitudeMps2 = magnitude,
+                    firstPeak = expiredPeak,
+                    separationMs = eventTimeMs - expiredPeak.timeMs,
+                )
+            }
             return false
         }
 
@@ -76,23 +125,58 @@ class ShakeGestureDetector(
         val previousPeak = firstPeak
         if (previousPeak == null) {
             firstPeak = currentPeak
+            recordDiagnostic(
+                stage = if (expiredPeak == null) {
+                    DiagnosticStage.FIRST_PEAK
+                } else {
+                    DiagnosticStage.RESTARTED_AFTER_TIMEOUT
+                },
+                sampleMagnitudeMps2 = magnitude,
+                firstPeak = expiredPeak ?: currentPeak,
+                secondPeak = currentPeak.takeIf { expiredPeak != null },
+                separationMs = expiredPeak?.let { eventTimeMs - it.timeMs },
+            )
             return false
         }
 
         val separationMs = eventTimeMs - previousPeak.timeMs
         if (separationMs < minPeakSeparationMs) {
+            recordDiagnostic(
+                stage = DiagnosticStage.TOO_SOON,
+                sampleMagnitudeMps2 = magnitude,
+                firstPeak = previousPeak,
+                secondPeak = currentPeak,
+                separationMs = separationMs,
+                cosine = cosineBetween(previousPeak, currentPeak),
+            )
             return false
         }
 
-        if (separationMs <= maxPeakSeparationMs &&
-            cosineBetween(previousPeak, currentPeak) <= maxOpposingCosine
+        val cosine = cosineBetween(previousPeak, currentPeak)
+        if (separationMs <= maxPeakSeparationMs && cosine <= maxOpposingCosine
         ) {
             firstPeak = null
             cooldownUntilMs = eventTimeMs + cooldownMs
+            recordDiagnostic(
+                stage = DiagnosticStage.DETECTED,
+                sampleMagnitudeMps2 = magnitude,
+                firstPeak = previousPeak,
+                secondPeak = currentPeak,
+                separationMs = separationMs,
+                cosine = cosine,
+            )
             return true
         }
 
         firstPeak = currentPeak
+        recordDiagnostic(
+            stage = DiagnosticStage.DIRECTION_REJECTED,
+            sampleMagnitudeMps2 = magnitude,
+            firstPeak = previousPeak,
+            secondPeak = currentPeak,
+            separationMs = separationMs,
+            cosine = cosine,
+        )
         return false
     }
 
@@ -101,6 +185,27 @@ class ShakeGestureDetector(
         peakArmed = true
         cooldownUntilMs = UNSET_TIME
         lastSampleTimeMs = UNSET_TIME
+        lastDiagnosticEvent = null
+    }
+
+    private fun recordDiagnostic(
+        stage: DiagnosticStage,
+        sampleMagnitudeMps2: Float,
+        firstPeak: Peak? = null,
+        secondPeak: Peak? = null,
+        separationMs: Long? = null,
+        cosine: Float? = null,
+    ) {
+        diagnosticSequence += 1L
+        lastDiagnosticEvent = DiagnosticEvent(
+            sequence = diagnosticSequence,
+            stage = stage,
+            sampleMagnitudeMps2 = sampleMagnitudeMps2,
+            firstPeakMagnitudeMps2 = firstPeak?.magnitude,
+            secondPeakMagnitudeMps2 = secondPeak?.magnitude,
+            separationMs = separationMs,
+            cosine = cosine,
+        )
     }
 
     private fun cosineBetween(first: Peak, second: Peak): Float {

@@ -40,6 +40,8 @@
     <string name="diagnostic_service_state">最後のサービス状態</string>
     <string name="diagnostic_sensor_state">振動センサーの状態</string>
     <string name="diagnostic_last_sensor_event">最後の振動センサーイベント</string>
+    <string name="diagnostic_max_shake_acceleration">監視開始後の最大加速度</string>
+    <string name="diagnostic_last_shake_decision">直前の振動判定</string>
     <string name="diagnostic_last_shake">最後の振動検出</string>
     <string name="diagnostic_last_key_event">最後の音量上イベント</string>
     <string name="diagnostic_last_quad_tap">最後の 4 連打検出</string>

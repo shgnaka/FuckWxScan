@@ -71,6 +71,8 @@ class QrAccessibilityService : AccessibilityService(), SensorEventListener,
     private var lastAccelerometerTimestampNs = UNSET_TIME
     private var sensorDiagnosticSamplePending = true
     private var lastMotionDiagnosticTimeMs = UNSET_TIME
+    private var maxObservedShakeAccelerationMps2 = 0f
+    private var lastRecordedShakeDiagnosticSequence = 0L
 
     override fun onCreate() {
         DiagnosticStore.markServiceStarting(this, "onCreate 開始")
@@ -164,19 +166,27 @@ class QrAccessibilityService : AccessibilityService(), SensorEventListener,
 
         val linearAcceleration = extractLinearAcceleration(event) ?: return
         val eventTimeMs = event.timestamp / NANOS_PER_MILLISECOND
-        recordMotionDiagnosticIfNeeded(event.sensor, linearAcceleration, eventTimeMs)
+        val magnitude = accelerationMagnitude(linearAcceleration)
+        recordMotionDiagnosticIfNeeded(
+            event.sensor,
+            linearAcceleration,
+            magnitude,
+            eventTimeMs,
+        )
 
         if (!powerManager.isInteractive || keyguardManager.isKeyguardLocked) {
             shakeDetector.reset()
             return
         }
 
+        recordShakeMaximumIfNeeded(magnitude, eventTimeMs)
         val detected = shakeDetector.onSample(
             x = linearAcceleration[0],
             y = linearAcceleration[1],
             z = linearAcceleration[2],
             eventTimeMs = eventTimeMs,
         )
+        recordShakeDiagnosticIfChanged()
         if (detected) {
             Log.i(TAG, "Shake gesture detected")
             DiagnosticStore.recordShake(this)
@@ -248,6 +258,7 @@ class QrAccessibilityService : AccessibilityService(), SensorEventListener,
                 return
             }
 
+            DiagnosticStore.resetShakeDetectorDiagnostics(this)
             DiagnosticStore.recordSensorState(
                 this,
                 "監視中：${describeSensor(sensor)}",
@@ -280,6 +291,8 @@ class QrAccessibilityService : AccessibilityService(), SensorEventListener,
         lastAccelerometerTimestampNs = UNSET_TIME
         sensorDiagnosticSamplePending = true
         lastMotionDiagnosticTimeMs = UNSET_TIME
+        maxObservedShakeAccelerationMps2 = 0f
+        lastRecordedShakeDiagnosticSequence = 0L
     }
 
     private fun describeSensor(sensor: Sensor): String {
@@ -327,13 +340,9 @@ class QrAccessibilityService : AccessibilityService(), SensorEventListener,
     private fun recordMotionDiagnosticIfNeeded(
         sensor: Sensor,
         acceleration: FloatArray,
+        magnitude: Float,
         eventTimeMs: Long,
     ) {
-        val magnitude = sqrt(
-            acceleration[0] * acceleration[0] +
-                acceleration[1] * acceleration[1] +
-                acceleration[2] * acceleration[2],
-        )
         val strongMotion = magnitude >= ShakeGestureDetector.DEFAULT_RELEASE_THRESHOLD_MPS2
         val diagnosticIntervalElapsed = lastMotionDiagnosticTimeMs == UNSET_TIME ||
             eventTimeMs - lastMotionDiagnosticTimeMs >= MOTION_DIAGNOSTIC_INTERVAL_MS
@@ -357,6 +366,81 @@ class QrAccessibilityService : AccessibilityService(), SensorEventListener,
             ),
         )
     }
+
+    private fun accelerationMagnitude(acceleration: FloatArray): Float = sqrt(
+        acceleration[0] * acceleration[0] +
+            acceleration[1] * acceleration[1] +
+            acceleration[2] * acceleration[2],
+    )
+
+    private fun recordShakeMaximumIfNeeded(magnitude: Float, eventTimeMs: Long) {
+        if (magnitude < maxObservedShakeAccelerationMps2 + MAXIMUM_RECORD_STEP_MPS2) {
+            return
+        }
+        maxObservedShakeAccelerationMps2 = magnitude
+        DiagnosticStore.recordShakeMaximum(
+            this,
+            String.format(
+                Locale.US,
+                "maximum=%.1f m/s² threshold=%.1f m/s² eventTime=%d",
+                magnitude,
+                ShakeGestureDetector.DEFAULT_PEAK_THRESHOLD_MPS2,
+                eventTimeMs,
+            ),
+        )
+    }
+
+    private fun recordShakeDiagnosticIfChanged() {
+        val event = shakeDetector.lastDiagnosticEvent ?: return
+        if (event.sequence == lastRecordedShakeDiagnosticSequence) {
+            return
+        }
+        lastRecordedShakeDiagnosticSequence = event.sequence
+        DiagnosticStore.recordShakeDecision(this, formatShakeDiagnostic(event))
+    }
+
+    private fun formatShakeDiagnostic(event: ShakeGestureDetector.DiagnosticEvent): String {
+        val first = formatMagnitude(event.firstPeakMagnitudeMps2)
+        val second = formatMagnitude(event.secondPeakMagnitudeMps2)
+        val sample = formatMagnitude(event.sampleMagnitudeMps2)
+        val interval = event.separationMs?.toString() ?: "none"
+        val cosine = event.cosine?.let { String.format(Locale.US, "%.2f", it) } ?: "none"
+        val peakThreshold = formatMagnitude(ShakeGestureDetector.DEFAULT_PEAK_THRESHOLD_MPS2)
+        val releaseThreshold = formatMagnitude(
+            ShakeGestureDetector.DEFAULT_RELEASE_THRESHOLD_MPS2,
+        )
+        val minimumInterval = ShakeGestureDetector.DEFAULT_MIN_PEAK_SEPARATION_MS
+        val maximumInterval = ShakeGestureDetector.DEFAULT_MAX_PEAK_SEPARATION_MS
+        val requiredCosine = String.format(
+            Locale.US,
+            "%.2f",
+            ShakeGestureDetector.DEFAULT_MAX_OPPOSING_COSINE,
+        )
+        val detail = when (event.stage) {
+            ShakeGestureDetector.DiagnosticStage.FIRST_PEAK ->
+                "第1ピーク受付：first=$first threshold=$peakThreshold"
+            ShakeGestureDetector.DiagnosticStage.REARMED ->
+                "第1ピーク後に再待機：first=$first releaseSample=$sample " +
+                    "required<=$releaseThreshold"
+            ShakeGestureDetector.DiagnosticStage.EXPIRED ->
+                "不成立：第2ピーク待ち時間切れ first=$first " +
+                    "elapsed=${interval}ms max=${maximumInterval}ms"
+            ShakeGestureDetector.DiagnosticStage.RESTARTED_AFTER_TIMEOUT ->
+                "時間切れ後に新候補：previous=$first current=$second elapsed=${interval}ms"
+            ShakeGestureDetector.DiagnosticStage.TOO_SOON ->
+                "第2ピークを棄却：早すぎる first=$first second=$second " +
+                    "interval=${interval}ms min=${minimumInterval}ms cosine=$cosine"
+            ShakeGestureDetector.DiagnosticStage.DIRECTION_REJECTED ->
+                "不成立：方向反転不足 first=$first second=$second " +
+                    "interval=${interval}ms cosine=$cosine required<=$requiredCosine"
+            ShakeGestureDetector.DiagnosticStage.DETECTED ->
+                "成立：first=$first second=$second interval=${interval}ms cosine=$cosine"
+        }
+        return "seq=${event.sequence} $detail"
+    }
+
+    private fun formatMagnitude(value: Float?): String =
+        value?.let { String.format(Locale.US, "%.1f", it) } ?: "none"
 
     private fun scanCurrentScreen() {
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.R) {
@@ -486,5 +570,6 @@ class QrAccessibilityService : AccessibilityService(), SensorEventListener,
         private const val GRAVITY_FILTER_TIME_CONSTANT_SECONDS = 0.8f
         private const val MAX_FILTER_INTERVAL_SECONDS = 1f
         private const val MOTION_DIAGNOSTIC_INTERVAL_MS = 500L
+        private const val MAXIMUM_RECORD_STEP_MPS2 = 0.1f
     }
 }

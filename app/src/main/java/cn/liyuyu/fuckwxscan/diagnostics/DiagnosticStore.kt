@@ -20,6 +20,8 @@ data class DiagnosticSnapshot(
     val serviceState: String,
     val sensorState: String,
     val lastSensorEvent: String,
+    val maxShakeAcceleration: String,
+    val lastShakeDecision: String,
     val lastShake: String,
     val lastKeyEvent: String,
     val lastQuadTap: String,
@@ -33,6 +35,8 @@ data class DiagnosticSnapshot(
             serviceState = NOT_RECORDED,
             sensorState = NOT_RECORDED,
             lastSensorEvent = NOT_RECORDED,
+            maxShakeAcceleration = NOT_RECORDED,
+            lastShakeDecision = NOT_RECORDED,
             lastShake = NOT_RECORDED,
             lastKeyEvent = NOT_RECORDED,
             lastQuadTap = NOT_RECORDED,
@@ -55,6 +59,10 @@ object DiagnosticStore {
     private const val KEY_SENSOR_STATE_AT = "sensor_state_at"
     private const val KEY_LAST_SENSOR_EVENT = "last_sensor_event"
     private const val KEY_LAST_SENSOR_EVENT_AT = "last_sensor_event_at"
+    private const val KEY_MAX_SHAKE_ACCELERATION = "max_shake_acceleration"
+    private const val KEY_MAX_SHAKE_ACCELERATION_AT = "max_shake_acceleration_at"
+    private const val KEY_LAST_SHAKE_DECISION = "last_shake_decision"
+    private const val KEY_LAST_SHAKE_DECISION_AT = "last_shake_decision_at"
     private const val KEY_LAST_SHAKE = "last_shake"
     private const val KEY_LAST_SHAKE_AT = "last_shake_at"
     private const val KEY_LAST_KEY_EVENT = "last_key_event"
@@ -149,6 +157,41 @@ object DiagnosticStore {
         }
     }
 
+    fun resetShakeDetectorDiagnostics(context: Context) {
+        safeRecord {
+            val now = System.currentTimeMillis()
+            preferences(context).edit()
+                .putString(KEY_MAX_SHAKE_ACCELERATION, "0.0 m/s²（監視開始）")
+                .putLong(KEY_MAX_SHAKE_ACCELERATION_AT, now)
+                .putString(KEY_LAST_SHAKE_DECISION, "候補なし")
+                .putLong(KEY_LAST_SHAKE_DECISION_AT, now)
+                .apply()
+        }
+    }
+
+    fun recordShakeMaximum(context: Context, message: String) {
+        safeRecord {
+            val now = System.currentTimeMillis()
+            preferences(context).edit()
+                .putString(KEY_MAX_SHAKE_ACCELERATION, message)
+                .putLong(KEY_MAX_SHAKE_ACCELERATION_AT, now)
+                .apply()
+            Log.d(TAG, message)
+        }
+    }
+
+    fun recordShakeDecision(context: Context, message: String) {
+        safeRecord {
+            val now = System.currentTimeMillis()
+            preferences(context).edit()
+                .putString(KEY_LAST_SHAKE_DECISION, message)
+                .putLong(KEY_LAST_SHAKE_DECISION_AT, now)
+                .apply()
+            appendEvent(context, now, "SHAKE", message, synchronous = false)
+            Log.i(TAG, message)
+        }
+    }
+
     fun recordShake(context: Context) {
         safeRecord {
             val now = System.currentTimeMillis()
@@ -208,6 +251,16 @@ object DiagnosticStore {
             KEY_LAST_SENSOR_EVENT,
             KEY_LAST_SENSOR_EVENT_AT,
         )
+        val maxShakeAcceleration = timedValue(
+            prefs,
+            KEY_MAX_SHAKE_ACCELERATION,
+            KEY_MAX_SHAKE_ACCELERATION_AT,
+        )
+        val lastShakeDecision = timedValue(
+            prefs,
+            KEY_LAST_SHAKE_DECISION,
+            KEY_LAST_SHAKE_DECISION_AT,
+        )
         val lastShake = timedValue(
             prefs,
             KEY_LAST_SHAKE,
@@ -238,6 +291,8 @@ object DiagnosticStore {
             serviceState = serviceState,
             sensorState = sensorState,
             lastSensorEvent = lastSensorEvent,
+            maxShakeAcceleration = maxShakeAcceleration,
+            lastShakeDecision = lastShakeDecision,
             lastShake = lastShake,
             lastKeyEvent = lastKeyEvent,
             lastQuadTap = lastQuadTap,
@@ -250,6 +305,8 @@ object DiagnosticStore {
             serviceState = serviceState,
             sensorState = sensorState,
             lastSensorEvent = lastSensorEvent,
+            maxShakeAcceleration = maxShakeAcceleration,
+            lastShakeDecision = lastShakeDecision,
             lastShake = lastShake,
             lastKeyEvent = lastKeyEvent,
             lastQuadTap = lastQuadTap,
@@ -264,6 +321,8 @@ object DiagnosticStore {
             serviceState = detail,
             sensorState = NOT_RECORDED,
             lastSensorEvent = NOT_RECORDED,
+            maxShakeAcceleration = NOT_RECORDED,
+            lastShakeDecision = NOT_RECORDED,
             lastShake = NOT_RECORDED,
             lastKeyEvent = NOT_RECORDED,
             lastQuadTap = NOT_RECORDED,
@@ -361,6 +420,8 @@ object DiagnosticStore {
         serviceState: String,
         sensorState: String,
         lastSensorEvent: String,
+        maxShakeAcceleration: String,
+        lastShakeDecision: String,
         lastShake: String,
         lastKeyEvent: String,
         lastQuadTap: String,
@@ -385,6 +446,12 @@ object DiagnosticStore {
         appendLine()
         appendLine("lastSensorEvent:")
         appendLine(lastSensorEvent)
+        appendLine()
+        appendLine("maxShakeAcceleration:")
+        appendLine(maxShakeAcceleration)
+        appendLine()
+        appendLine("lastShakeDecision:")
+        appendLine(lastShakeDecision)
         appendLine()
         appendLine("lastShake:")
         appendLine(lastShake)
