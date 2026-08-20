@@ -14,42 +14,42 @@ class VolumeQuadTapDetectorTest {
     @Test
     fun fourFastCompletedTapsTriggerOnce() {
         assertFalse(tap(0))
-        assertFalse(tap(90))
-        assertFalse(tap(180))
-        assertTrue(tap(270))
-        assertFalse(tap(360))
+        assertFalse(tap(200))
+        assertFalse(tap(400))
+        assertTrue(tap(600))
+        assertFalse(tap(800))
     }
 
     @Test
     fun threeTapsDoNotTrigger() {
         assertFalse(tap(0))
-        assertFalse(tap(90))
-        assertFalse(tap(180))
+        assertFalse(tap(200))
+        assertFalse(tap(400))
     }
 
     @Test
     fun exactTimingBoundariesAreAccepted() {
         assertFalse(tap(0, 10))
-        assertFalse(tap(100, 110))
-        assertFalse(tap(200, 210))
-        assertTrue(tap(290, 300))
+        assertFalse(tap(220, 230))
+        assertFalse(tap(440, 450))
+        assertTrue(tap(660, 700))
     }
 
     @Test
     fun interTapTimeoutStartsANewCandidate() {
         assertFalse(tap(0))
-        assertFalse(tap(101))
-        assertFalse(tap(191))
-        assertFalse(tap(281))
-        assertTrue(tap(371))
+        assertFalse(tap(221))
+        assertFalse(tap(421))
+        assertFalse(tap(621))
+        assertTrue(tap(821))
     }
 
     @Test
     fun totalTimeoutRejectsFourthTap() {
-        assertFalse(tap(0, 1))
-        assertFalse(tap(100, 101))
-        assertFalse(tap(200, 201))
-        assertFalse(tap(300, 301))
+        assertFalse(tap(0, 10))
+        assertFalse(tap(220, 230))
+        assertFalse(tap(440, 450))
+        assertFalse(tap(660, 701))
     }
 
     @Test
@@ -63,9 +63,9 @@ class VolumeQuadTapDetectorTest {
                 eventTimeMs = 40,
             ),
         )
-        assertFalse(tap(100))
-        assertFalse(tap(190))
-        assertFalse(tap(280))
+        assertFalse(tap(220))
+        assertFalse(tap(420))
+        assertFalse(tap(620))
     }
 
     @Test
@@ -79,9 +79,9 @@ class VolumeQuadTapDetectorTest {
                 eventTimeMs = 40,
             ),
         )
-        assertFalse(tap(100))
-        assertFalse(tap(190))
-        assertFalse(tap(280))
+        assertFalse(tap(220))
+        assertFalse(tap(420))
+        assertFalse(tap(620))
     }
 
     @Test

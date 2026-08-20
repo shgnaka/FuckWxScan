@@ -16,7 +16,7 @@ Android に「画面内の QR コードを読む」ための物理ショート�
 ## 現在の実装
 
 - 音量上ボタンの高速 4 連打を検出
-- 各タップ間隔 100 ms 以下、全体 300 ms 以下
+- 各タップ間隔 220 ms 以下、全体 700 ms 以下
 - 長押しの repeat イベント、別キー、不正な DOWN / UP 順序を除外
 - キーイベントを消費せず、Android 標準の音量操作を維持
 - Android 11 以降は AccessibilityService.takeScreenshot()

@@ -115,8 +115,8 @@ class VolumeQuadTapDetector(
 
     companion object {
         const val DEFAULT_REQUIRED_TAP_COUNT = 4
-        const val DEFAULT_MAX_INTER_TAP_INTERVAL_MS = 100L
-        const val DEFAULT_MAX_GESTURE_DURATION_MS = 300L
+        const val DEFAULT_MAX_INTER_TAP_INTERVAL_MS = 220L
+        const val DEFAULT_MAX_GESTURE_DURATION_MS = 700L
 
         private const val UNSET_TIME = -1L
     }

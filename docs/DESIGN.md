@@ -10,7 +10,7 @@
 
 - 対象キーは `KEYCODE_VOLUME_UP`
 - 1 タップは `ACTION_DOWN(repeatCount = 0)` の後に `ACTION_UP` が来た場合
-- 4 タップ、各 DOWN 間隔 100 ms 以下、最初の DOWN から最後の UP まで 300 ms 以下
+- 4 タップ、各 DOWN 間隔 220 ms 以下、最初の DOWN から最後の UP まで 700 ms 以下
 - repeat、別キー、不正な DOWN / UP 順序、タイムアウトで候補をリセット
 - MVP は `onKeyEvent()` から `false` を返し、通常の音量処理を Android に任せる
 - API 30 以降は `AccessibilityService.takeScreenshot()`
@@ -49,7 +49,7 @@ QrAccessibilityService
 
 ## 実機で確認する事項
 
-1. 100 / 300 ms が安定して入力できるか
+1. 220 / 700 ms の操作性と通常の音量操作による誤発動
 2. 音量が 4 段上がる副作用を許容できるか
 3. 音量パネルが QR を隠すか
 4. 端末再起動、プロセス終了、画面ロック後の MediaProjection 再許可 UX
