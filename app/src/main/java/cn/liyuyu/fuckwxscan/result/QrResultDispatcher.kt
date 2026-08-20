@@ -11,7 +11,7 @@ import android.widget.Toast
 import cn.liyuyu.fuckwxscan.R
 import cn.liyuyu.fuckwxscan.data.BarcodeResult
 import cn.liyuyu.fuckwxscan.data.ResultType
-import cn.liyuyu.fuckwxscan.ui.MainActivity
+import cn.liyuyu.fuckwxscan.ui.QrSelectionActivity
 import cn.liyuyu.fuckwxscan.utils.BarcodeUtil
 
 class QrResultDispatcher(
@@ -26,13 +26,15 @@ class QrResultDispatcher(
     }
 
     private fun showSelection(results: List<BarcodeResult>, screenshotUri: Uri?) {
-        val intent = Intent(context, MainActivity::class.java).apply {
+        val intent = Intent(context, QrSelectionActivity::class.java).apply {
             putParcelableArrayListExtra(
-                MainActivity.EXTRA_BARCODE_RESULTS,
+                QrSelectionActivity.EXTRA_BARCODE_RESULTS,
                 ArrayList(results),
             )
-            putExtra(MainActivity.EXTRA_BARCODE_BITMAP, screenshotUri)
-            addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+            putExtra(QrSelectionActivity.EXTRA_BARCODE_BITMAP, screenshotUri)
+            flags = Intent.FLAG_ACTIVITY_NEW_TASK or
+                Intent.FLAG_ACTIVITY_CLEAR_TASK or
+                Intent.FLAG_ACTIVITY_EXCLUDE_FROM_RECENTS
         }
         context.startActivity(intent)
     }

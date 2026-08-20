@@ -3,7 +3,11 @@
 
     <style name="Theme.FuckWxScan" parent="android:Theme.Material.Light.NoActionBar">
         <item name="android:statusBarColor">@color/transparent</item>
+    </style>
+
+    <style name="Theme.FuckWxScan.Selection" parent="Theme.FuckWxScan">
         <item name="android:windowBackground">@color/transparent</item>
+        <item name="android:backgroundDimEnabled">false</item>
         <item name="android:windowIsTranslucent">true</item>
         <item name="android:windowAnimationStyle">@android:style/Animation.Toast</item>
     </style>
