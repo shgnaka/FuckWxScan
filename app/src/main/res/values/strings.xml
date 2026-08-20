@@ -1,5 +1,32 @@
+<!--
+  Modified by contributors to shgnaka/FuckWxScan in 2026:
+  replaced the original product text for the volume-gesture scanner UI.
+-->
 <resources>
-    <string name="app_name">扫你码</string>
-    <string name="notification_title">扫你码</string>
-    <string name="notification_sub_title">快来扫吧~</string>
+    <string name="app_name">QR Volume Scanner</string>
+    <string name="notification_title">QR Volume Scanner</string>
+    <string name="notification_sub_title">画面取得を実行しています</string>
+
+    <string name="accessibility_service_name">QR Volume Scanner</string>
+    <string name="accessibility_service_description">音量上ボタンの高速 4 連打で、現在の画面にある QR コードを読み取ります。キー操作は消費せず、通常の音量変更も行われます。</string>
+    <string name="setup_title">QR Volume Scanner</string>
+    <string name="setup_description">音量上ボタンを素早く 4 回押すと、現在の画面にある QR コードを読み取ります。</string>
+    <string name="accessibility_status_enabled">ユーザー補助サービス：有効</string>
+    <string name="accessibility_status_disabled">ユーザー補助サービス：無効</string>
+    <string name="open_accessibility_settings">ユーザー補助設定を開く</string>
+    <string name="auto_copy_label">読み取り結果を自動コピー</string>
+    <string name="auto_copy_description">初期値は OFF です。URL を開く場合も、ON なら先にコピーします。</string>
+    <string name="legacy_capture_ready">画面取得の準備：完了</string>
+    <string name="legacy_capture_not_ready">画面取得の準備：未完了</string>
+    <string name="prepare_legacy_capture">画面取得を準備する</string>
+    <string name="legacy_capture_explanation">Android 7〜10 では、再起動やプロセス終了後に画面取得の許可が必要です。</string>
+    <string name="legacy_capture_permission_granted">画面取得の準備ができました</string>
+    <string name="legacy_capture_permission_denied">画面取得が許可されませんでした</string>
+    <string name="legacy_capture_permission_needed">画面取得の準備が必要です</string>
+    <string name="screenshot_failed">画面を取得できませんでした</string>
+    <string name="qr_not_found">QR コードが見つかりませんでした</string>
+    <string name="cancel">キャンセル</string>
+    <string name="clip_label">QR 読み取り結果</string>
+    <string name="no_alipay_handler">Alipay を開けませんでした</string>
+    <string name="no_url_handler">この URL を開けるアプリがありません</string>
 </resources>
