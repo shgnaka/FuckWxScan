@@ -109,7 +109,6 @@ class QrAccessibilityService : AccessibilityService() {
                     return@launch
                 }
 
-                var overlayOwnsBitmap = false
                 try {
                     val results = withContext(Dispatchers.Default) {
                         QrDecoder.decode(bitmap)
@@ -122,8 +121,9 @@ class QrAccessibilityService : AccessibilityService() {
                         null
                     }
                     if (results.size > 1) {
-                        overlayOwnsBitmap = multiQrOverlayController.show(
-                            screenshot = bitmap,
+                        val overlayShown = multiQrOverlayController.show(
+                            sourceWidth = bitmap.width,
+                            sourceHeight = bitmap.height,
                             results = results,
                             onSelected = { result ->
                                 ResultHandler(this@QrAccessibilityService).handle(
@@ -132,7 +132,7 @@ class QrAccessibilityService : AccessibilityService() {
                                 )
                             },
                         )
-                        if (!overlayOwnsBitmap) {
+                        if (!overlayShown) {
                             Toast.makeText(
                                 this@QrAccessibilityService,
                                 R.string.qr_selection_overlay_failed,
@@ -146,7 +146,7 @@ class QrAccessibilityService : AccessibilityService() {
                         )
                     }
                 } finally {
-                    if (!overlayOwnsBitmap) {
+                    if (!bitmap.isRecycled) {
                         bitmap.recycle()
                     }
                 }
