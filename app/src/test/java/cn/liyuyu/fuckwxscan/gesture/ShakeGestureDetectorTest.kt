@@ -44,7 +44,7 @@ class ShakeGestureDetectorTest {
     fun peaksOutsideWindowDoNotTrigger() {
         assertFalse(detector.onSample(13f, 0f, 0f, 0L))
         assertFalse(detector.onSample(0f, 0f, 0f, 80L))
-        assertFalse(detector.onSample(-13f, 0f, 0f, 601L))
+        assertFalse(detector.onSample(-13f, 0f, 0f, 701L))
     }
 
     @Test
@@ -60,7 +60,7 @@ class ShakeGestureDetectorTest {
         assertFalse(detector.onSample(13f, 0f, 0f, 0L))
         assertFalse(detector.onSample(0f, 0f, 0f, 200L))
 
-        assertTrue(detector.onSample(-7f, 0f, 0f, 400L))
+        assertTrue(detector.onSample(-6f, 0f, 0f, 400L))
     }
 
     @Test
@@ -68,7 +68,64 @@ class ShakeGestureDetectorTest {
         assertFalse(detector.onSample(13f, 0f, 0f, 0L))
         assertFalse(detector.onSample(0f, 0f, 0f, 200L))
 
-        assertFalse(detector.onSample(-6.9f, 0f, 0f, 400L))
+        assertFalse(detector.onSample(-5.9f, 0f, 0f, 400L))
+    }
+
+    @Test
+    fun gentleCleanOpposingPeaksTrigger() {
+        assertFalse(detector.onSample(8f, 0f, 0f, 0L))
+        assertFalse(detector.onSample(0f, 0f, 0f, 200L))
+
+        assertTrue(detector.onSample(-6f, 0f, 0f, 450L))
+        assertEquals(-0.60f, detector.lastDiagnosticEvent?.requiredCosine ?: 0f, 0.001f)
+    }
+
+    @Test
+    fun gentleRoundTripAtWindowBoundaryTriggers() {
+        assertFalse(detector.onSample(8f, 0f, 0f, 0L))
+        assertFalse(detector.onSample(0f, 0f, 0f, 350L))
+
+        assertTrue(detector.onSample(-6f, 0f, 0f, 700L))
+    }
+
+    @Test
+    fun gentlePeaksNeedClearerDirectionReversal() {
+        assertFalse(detector.onSample(8f, 0f, 0f, 0L))
+        assertFalse(detector.onSample(0f, 0f, 0f, 200L))
+
+        assertFalse(detector.onSample(-3f, 5.2f, 0f, 450L))
+        assertEquals(
+            ShakeGestureDetector.DiagnosticStage.DIRECTION_REJECTED,
+            detector.lastDiagnosticEvent?.stage,
+        )
+    }
+
+    @Test
+    fun strongPeakKeepsOriginalDirectionTolerance() {
+        assertFalse(detector.onSample(13f, 0f, 0f, 0L))
+        assertFalse(detector.onSample(0f, 0f, 0f, 200L))
+
+        assertTrue(detector.onSample(-2f, 6f, 0f, 450L))
+        assertEquals(-0.25f, detector.lastDiagnosticEvent?.requiredCosine ?: 0f, 0.001f)
+    }
+
+    @Test
+    fun strongReturnPeakKeepsOriginalDirectionTolerance() {
+        assertFalse(detector.onSample(8f, 0f, 0f, 0L))
+        assertFalse(detector.onSample(0f, 0f, 0f, 200L))
+
+        assertTrue(detector.onSample(-4f, 12f, 0f, 450L))
+        assertEquals(-0.25f, detector.lastDiagnosticEvent?.requiredCosine ?: 0f, 0.001f)
+    }
+
+    @Test
+    fun strongestSampleDefinesFirstPeakProfile() {
+        assertFalse(detector.onSample(8f, 0f, 0f, 0L))
+        assertFalse(detector.onSample(13f, 0f, 0f, 30L))
+        assertFalse(detector.onSample(0f, 0f, 0f, 200L))
+
+        assertTrue(detector.onSample(-2f, 6f, 0f, 450L))
+        assertEquals(13f, detector.lastDiagnosticEvent?.firstPeakMagnitudeMps2 ?: 0f, 0.001f)
     }
 
     @Test
@@ -114,7 +171,7 @@ class ShakeGestureDetectorTest {
 
     @Test
     fun belowThresholdDoesNotCreateCandidate() {
-        assertFalse(detector.onSample(5f, 0f, 0f, 0L))
+        assertFalse(detector.onSample(7.9f, 0f, 0f, 0L))
 
         assertNull(detector.lastDiagnosticEvent)
     }
@@ -146,11 +203,11 @@ class ShakeGestureDetectorTest {
     fun expiredCandidateReportsElapsedTime() {
         assertFalse(detector.onSample(13f, 0f, 0f, 0L))
         assertFalse(detector.onSample(0f, 0f, 0f, 80L))
-        assertFalse(detector.onSample(0f, 0f, 0f, 601L))
+        assertFalse(detector.onSample(0f, 0f, 0f, 701L))
 
         val event = detector.lastDiagnosticEvent
         assertEquals(ShakeGestureDetector.DiagnosticStage.EXPIRED, event?.stage)
-        assertEquals(601L, event?.separationMs)
+        assertEquals(701L, event?.separationMs)
     }
 
     @Test
@@ -183,14 +240,14 @@ class ShakeGestureDetectorTest {
     fun strongPeakAfterTimeoutReportsNewCandidate() {
         assertFalse(detector.onSample(13f, 0f, 0f, 0L))
         assertFalse(detector.onSample(0f, 0f, 0f, 80L))
-        assertFalse(detector.onSample(-14f, 0f, 0f, 601L))
+        assertFalse(detector.onSample(-14f, 0f, 0f, 701L))
 
         val event = detector.lastDiagnosticEvent
         assertEquals(
             ShakeGestureDetector.DiagnosticStage.RESTARTED_AFTER_TIMEOUT,
             event?.stage,
         )
-        assertEquals(601L, event?.separationMs)
+        assertEquals(701L, event?.separationMs)
         assertEquals(13f, event?.firstPeakMagnitudeMps2 ?: 0f, 0.001f)
         assertEquals(14f, event?.secondPeakMagnitudeMps2 ?: 0f, 0.001f)
     }

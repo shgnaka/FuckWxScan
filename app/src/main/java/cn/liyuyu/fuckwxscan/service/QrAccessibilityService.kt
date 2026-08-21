@@ -405,7 +405,13 @@ class QrAccessibilityService : AccessibilityService(), SensorEventListener,
         val sample = formatMagnitude(event.sampleMagnitudeMps2)
         val interval = event.separationMs?.toString() ?: "none"
         val cosine = event.cosine?.let { String.format(Locale.US, "%.2f", it) } ?: "none"
+        val requiredCosine = event.requiredCosine?.let {
+            String.format(Locale.US, "%.2f", it)
+        } ?: "none"
         val peakThreshold = formatMagnitude(ShakeGestureDetector.DEFAULT_PEAK_THRESHOLD_MPS2)
+        val strongPeakThreshold = formatMagnitude(
+            ShakeGestureDetector.DEFAULT_STRONG_PEAK_THRESHOLD_MPS2,
+        )
         val secondPeakThreshold = formatMagnitude(
             ShakeGestureDetector.DEFAULT_SECOND_PEAK_THRESHOLD_MPS2,
         )
@@ -414,14 +420,10 @@ class QrAccessibilityService : AccessibilityService(), SensorEventListener,
         )
         val minimumInterval = ShakeGestureDetector.DEFAULT_MIN_PEAK_SEPARATION_MS
         val maximumInterval = ShakeGestureDetector.DEFAULT_MAX_PEAK_SEPARATION_MS
-        val requiredCosine = String.format(
-            Locale.US,
-            "%.2f",
-            ShakeGestureDetector.DEFAULT_MAX_OPPOSING_COSINE,
-        )
         val detail = when (event.stage) {
             ShakeGestureDetector.DiagnosticStage.FIRST_PEAK ->
-                "第1ピーク受付：first=$first threshold=$peakThreshold"
+                "第1ピーク受付：first=$first minimum=$peakThreshold " +
+                    "strong=$strongPeakThreshold"
             ShakeGestureDetector.DiagnosticStage.REARMED ->
                 "第1ピーク後に再待機：first=$first releaseSample=$sample " +
                     "required<=$releaseThreshold secondThreshold=$secondPeakThreshold"
@@ -437,7 +439,8 @@ class QrAccessibilityService : AccessibilityService(), SensorEventListener,
                 "不成立：方向反転不足 first=$first second=$second " +
                     "interval=${interval}ms cosine=$cosine required<=$requiredCosine"
             ShakeGestureDetector.DiagnosticStage.DETECTED ->
-                "成立：first=$first second=$second interval=${interval}ms cosine=$cosine"
+                "成立：first=$first second=$second interval=${interval}ms " +
+                    "cosine=$cosine required<=$requiredCosine"
         }
         return "seq=${event.sequence} $detail"
     }
