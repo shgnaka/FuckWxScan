@@ -44,7 +44,41 @@ class ShakeGestureDetectorTest {
     fun peaksOutsideWindowDoNotTrigger() {
         assertFalse(detector.onSample(13f, 0f, 0f, 0L))
         assertFalse(detector.onSample(0f, 0f, 0f, 80L))
-        assertFalse(detector.onSample(-13f, 0f, 0f, 351L))
+        assertFalse(detector.onSample(-13f, 0f, 0f, 601L))
+    }
+
+    @Test
+    fun deviceRoundTripAt475MillisecondsTriggers() {
+        assertFalse(detector.onSample(14.3f, 0f, 0f, 0L))
+        assertFalse(detector.onSample(3.2f, 0f, 0f, 342L))
+
+        assertTrue(detector.onSample(-14.2f, 0f, 0f, 475L))
+    }
+
+    @Test
+    fun weakerOpposingReturnPeakTriggers() {
+        assertFalse(detector.onSample(13f, 0f, 0f, 0L))
+        assertFalse(detector.onSample(0f, 0f, 0f, 200L))
+
+        assertTrue(detector.onSample(-7f, 0f, 0f, 400L))
+    }
+
+    @Test
+    fun returnPeakBelowSecondThresholdDoesNotTrigger() {
+        assertFalse(detector.onSample(13f, 0f, 0f, 0L))
+        assertFalse(detector.onSample(0f, 0f, 0f, 200L))
+
+        assertFalse(detector.onSample(-6.9f, 0f, 0f, 400L))
+    }
+
+    @Test
+    fun weakRejectedReturnPeakDoesNotBecomeANewFirstPeak() {
+        assertFalse(detector.onSample(13f, 0f, 0f, 0L))
+        assertFalse(detector.onSample(0f, 0f, 0f, 150L))
+        assertFalse(detector.onSample(7f, 0f, 0f, 300L))
+        assertFalse(detector.onSample(0f, 0f, 0f, 350L))
+
+        assertFalse(detector.onSample(-13f, 0f, 0f, 500L))
     }
 
     @Test
@@ -112,11 +146,11 @@ class ShakeGestureDetectorTest {
     fun expiredCandidateReportsElapsedTime() {
         assertFalse(detector.onSample(13f, 0f, 0f, 0L))
         assertFalse(detector.onSample(0f, 0f, 0f, 80L))
-        assertFalse(detector.onSample(0f, 0f, 0f, 351L))
+        assertFalse(detector.onSample(0f, 0f, 0f, 601L))
 
         val event = detector.lastDiagnosticEvent
         assertEquals(ShakeGestureDetector.DiagnosticStage.EXPIRED, event?.stage)
-        assertEquals(351L, event?.separationMs)
+        assertEquals(601L, event?.separationMs)
     }
 
     @Test
@@ -149,14 +183,14 @@ class ShakeGestureDetectorTest {
     fun strongPeakAfterTimeoutReportsNewCandidate() {
         assertFalse(detector.onSample(13f, 0f, 0f, 0L))
         assertFalse(detector.onSample(0f, 0f, 0f, 80L))
-        assertFalse(detector.onSample(-14f, 0f, 0f, 351L))
+        assertFalse(detector.onSample(-14f, 0f, 0f, 601L))
 
         val event = detector.lastDiagnosticEvent
         assertEquals(
             ShakeGestureDetector.DiagnosticStage.RESTARTED_AFTER_TIMEOUT,
             event?.stage,
         )
-        assertEquals(351L, event?.separationMs)
+        assertEquals(601L, event?.separationMs)
         assertEquals(13f, event?.firstPeakMagnitudeMps2 ?: 0f, 0.001f)
         assertEquals(14f, event?.secondPeakMagnitudeMps2 ?: 0f, 0.001f)
     }

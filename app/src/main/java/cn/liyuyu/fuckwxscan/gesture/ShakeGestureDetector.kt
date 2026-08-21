@@ -14,6 +14,7 @@ import kotlin.math.sqrt
  */
 class ShakeGestureDetector(
     private val peakThresholdMps2: Float = DEFAULT_PEAK_THRESHOLD_MPS2,
+    private val secondPeakThresholdMps2: Float = DEFAULT_SECOND_PEAK_THRESHOLD_MPS2,
     private val releaseThresholdMps2: Float = DEFAULT_RELEASE_THRESHOLD_MPS2,
     private val minPeakSeparationMs: Long = DEFAULT_MIN_PEAK_SEPARATION_MS,
     private val maxPeakSeparationMs: Long = DEFAULT_MAX_PEAK_SEPARATION_MS,
@@ -59,8 +60,10 @@ class ShakeGestureDetector(
 
     init {
         require(peakThresholdMps2 > 0f)
+        require(secondPeakThresholdMps2 > 0f)
         require(releaseThresholdMps2 >= 0f)
-        require(releaseThresholdMps2 < peakThresholdMps2)
+        require(releaseThresholdMps2 < secondPeakThresholdMps2)
+        require(secondPeakThresholdMps2 <= peakThresholdMps2)
         require(minPeakSeparationMs >= 0L)
         require(maxPeakSeparationMs >= minPeakSeparationMs)
         require(maxOpposingCosine in -1f..1f)
@@ -108,7 +111,12 @@ class ShakeGestureDetector(
             }
             return false
         }
-        if (!peakArmed || magnitude < peakThresholdMps2) {
+        val requiredPeakThreshold = if (firstPeak == null) {
+            peakThresholdMps2
+        } else {
+            secondPeakThresholdMps2
+        }
+        if (!peakArmed || magnitude < requiredPeakThreshold) {
             if (expiredPeak != null) {
                 recordDiagnostic(
                     stage = DiagnosticStage.EXPIRED,
@@ -168,7 +176,7 @@ class ShakeGestureDetector(
             return true
         }
 
-        firstPeak = currentPeak
+        firstPeak = currentPeak.takeIf { it.magnitude >= peakThresholdMps2 }
         recordDiagnostic(
             stage = DiagnosticStage.DIRECTION_REJECTED,
             sampleMagnitudeMps2 = magnitude,
@@ -218,9 +226,10 @@ class ShakeGestureDetector(
 
     companion object {
         const val DEFAULT_PEAK_THRESHOLD_MPS2 = 12f
+        const val DEFAULT_SECOND_PEAK_THRESHOLD_MPS2 = 7f
         const val DEFAULT_RELEASE_THRESHOLD_MPS2 = 4f
-        const val DEFAULT_MIN_PEAK_SEPARATION_MS = 60L
-        const val DEFAULT_MAX_PEAK_SEPARATION_MS = 350L
+        const val DEFAULT_MIN_PEAK_SEPARATION_MS = 100L
+        const val DEFAULT_MAX_PEAK_SEPARATION_MS = 600L
         const val DEFAULT_MAX_OPPOSING_COSINE = -0.25f
         const val DEFAULT_COOLDOWN_MS = 1_500L
 

@@ -406,6 +406,9 @@ class QrAccessibilityService : AccessibilityService(), SensorEventListener,
         val interval = event.separationMs?.toString() ?: "none"
         val cosine = event.cosine?.let { String.format(Locale.US, "%.2f", it) } ?: "none"
         val peakThreshold = formatMagnitude(ShakeGestureDetector.DEFAULT_PEAK_THRESHOLD_MPS2)
+        val secondPeakThreshold = formatMagnitude(
+            ShakeGestureDetector.DEFAULT_SECOND_PEAK_THRESHOLD_MPS2,
+        )
         val releaseThreshold = formatMagnitude(
             ShakeGestureDetector.DEFAULT_RELEASE_THRESHOLD_MPS2,
         )
@@ -421,7 +424,7 @@ class QrAccessibilityService : AccessibilityService(), SensorEventListener,
                 "第1ピーク受付：first=$first threshold=$peakThreshold"
             ShakeGestureDetector.DiagnosticStage.REARMED ->
                 "第1ピーク後に再待機：first=$first releaseSample=$sample " +
-                    "required<=$releaseThreshold"
+                    "required<=$releaseThreshold secondThreshold=$secondPeakThreshold"
             ShakeGestureDetector.DiagnosticStage.EXPIRED ->
                 "不成立：第2ピーク待ち時間切れ first=$first " +
                     "elapsed=${interval}ms max=${maximumInterval}ms"
