@@ -23,6 +23,11 @@ data class DiagnosticSnapshot(
     val maxShakeAcceleration: String,
     val lastShakeDecision: String,
     val lastShake: String,
+    val twistSensorState: String,
+    val lastTwistSensorEvent: String,
+    val maxTwistAngularSpeed: String,
+    val lastTwistDecision: String,
+    val lastTwist: String,
     val lastKeyEvent: String,
     val lastQuadTap: String,
     val lastError: String,
@@ -38,6 +43,11 @@ data class DiagnosticSnapshot(
             maxShakeAcceleration = NOT_RECORDED,
             lastShakeDecision = NOT_RECORDED,
             lastShake = NOT_RECORDED,
+            twistSensorState = NOT_RECORDED,
+            lastTwistSensorEvent = NOT_RECORDED,
+            maxTwistAngularSpeed = NOT_RECORDED,
+            lastTwistDecision = NOT_RECORDED,
+            lastTwist = NOT_RECORDED,
             lastKeyEvent = NOT_RECORDED,
             lastQuadTap = NOT_RECORDED,
             lastError = NOT_RECORDED,
@@ -65,6 +75,16 @@ object DiagnosticStore {
     private const val KEY_LAST_SHAKE_DECISION_AT = "last_shake_decision_at"
     private const val KEY_LAST_SHAKE = "last_shake"
     private const val KEY_LAST_SHAKE_AT = "last_shake_at"
+    private const val KEY_TWIST_SENSOR_STATE = "twist_sensor_state"
+    private const val KEY_TWIST_SENSOR_STATE_AT = "twist_sensor_state_at"
+    private const val KEY_LAST_TWIST_SENSOR_EVENT = "last_twist_sensor_event"
+    private const val KEY_LAST_TWIST_SENSOR_EVENT_AT = "last_twist_sensor_event_at"
+    private const val KEY_MAX_TWIST_ANGULAR_SPEED = "max_twist_angular_speed"
+    private const val KEY_MAX_TWIST_ANGULAR_SPEED_AT = "max_twist_angular_speed_at"
+    private const val KEY_LAST_TWIST_DECISION = "last_twist_decision"
+    private const val KEY_LAST_TWIST_DECISION_AT = "last_twist_decision_at"
+    private const val KEY_LAST_TWIST = "last_twist"
+    private const val KEY_LAST_TWIST_AT = "last_twist_at"
     private const val KEY_LAST_KEY_EVENT = "last_key_event"
     private const val KEY_LAST_KEY_EVENT_AT = "last_key_event_at"
     private const val KEY_LAST_QUAD_TAP = "last_quad_tap"
@@ -205,6 +225,77 @@ object DiagnosticStore {
         }
     }
 
+    fun recordTwistSensorState(context: Context, state: String) {
+        safeRecord {
+            val now = System.currentTimeMillis()
+            preferences(context).edit()
+                .putString(KEY_TWIST_SENSOR_STATE, state)
+                .putLong(KEY_TWIST_SENSOR_STATE_AT, now)
+                .apply()
+            appendEvent(context, now, "TWIST_SENSOR", state, synchronous = false)
+            Log.i(TAG, state)
+        }
+    }
+
+    fun recordTwistSensorSample(context: Context, sample: String) {
+        safeRecord {
+            val now = System.currentTimeMillis()
+            preferences(context).edit()
+                .putString(KEY_LAST_TWIST_SENSOR_EVENT, sample)
+                .putLong(KEY_LAST_TWIST_SENSOR_EVENT_AT, now)
+                .apply()
+            Log.d(TAG, sample)
+        }
+    }
+
+    fun resetTwistDetectorDiagnostics(context: Context) {
+        safeRecord {
+            val now = System.currentTimeMillis()
+            preferences(context).edit()
+                .putString(KEY_MAX_TWIST_ANGULAR_SPEED, "0.0 rad/s（監視開始）")
+                .putLong(KEY_MAX_TWIST_ANGULAR_SPEED_AT, now)
+                .putString(KEY_LAST_TWIST_DECISION, "候補なし")
+                .putLong(KEY_LAST_TWIST_DECISION_AT, now)
+                .apply()
+        }
+    }
+
+    fun recordTwistMaximum(context: Context, message: String) {
+        safeRecord {
+            val now = System.currentTimeMillis()
+            preferences(context).edit()
+                .putString(KEY_MAX_TWIST_ANGULAR_SPEED, message)
+                .putLong(KEY_MAX_TWIST_ANGULAR_SPEED_AT, now)
+                .apply()
+            Log.d(TAG, message)
+        }
+    }
+
+    fun recordTwistDecision(context: Context, message: String) {
+        safeRecord {
+            val now = System.currentTimeMillis()
+            preferences(context).edit()
+                .putString(KEY_LAST_TWIST_DECISION, message)
+                .putLong(KEY_LAST_TWIST_DECISION_AT, now)
+                .apply()
+            appendEvent(context, now, "TWIST", message, synchronous = false)
+            Log.i(TAG, message)
+        }
+    }
+
+    fun recordWristTwist(context: Context) {
+        safeRecord {
+            val now = System.currentTimeMillis()
+            val message = "手首をひねって戻す操作を検出"
+            preferences(context).edit()
+                .putString(KEY_LAST_TWIST, message)
+                .putLong(KEY_LAST_TWIST_AT, now)
+                .apply()
+            appendEvent(context, now, "GESTURE", message, synchronous = false)
+            Log.i(TAG, message)
+        }
+    }
+
     fun recordStage(context: Context, stage: String) {
         recordEvent(context, "STAGE", stage)
     }
@@ -266,6 +357,31 @@ object DiagnosticStore {
             KEY_LAST_SHAKE,
             KEY_LAST_SHAKE_AT,
         )
+        val twistSensorState = timedValue(
+            prefs,
+            KEY_TWIST_SENSOR_STATE,
+            KEY_TWIST_SENSOR_STATE_AT,
+        )
+        val lastTwistSensorEvent = timedValue(
+            prefs,
+            KEY_LAST_TWIST_SENSOR_EVENT,
+            KEY_LAST_TWIST_SENSOR_EVENT_AT,
+        )
+        val maxTwistAngularSpeed = timedValue(
+            prefs,
+            KEY_MAX_TWIST_ANGULAR_SPEED,
+            KEY_MAX_TWIST_ANGULAR_SPEED_AT,
+        )
+        val lastTwistDecision = timedValue(
+            prefs,
+            KEY_LAST_TWIST_DECISION,
+            KEY_LAST_TWIST_DECISION_AT,
+        )
+        val lastTwist = timedValue(
+            prefs,
+            KEY_LAST_TWIST,
+            KEY_LAST_TWIST_AT,
+        )
         val lastKeyEvent = timedValue(
             prefs,
             KEY_LAST_KEY_EVENT,
@@ -294,6 +410,11 @@ object DiagnosticStore {
             maxShakeAcceleration = maxShakeAcceleration,
             lastShakeDecision = lastShakeDecision,
             lastShake = lastShake,
+            twistSensorState = twistSensorState,
+            lastTwistSensorEvent = lastTwistSensorEvent,
+            maxTwistAngularSpeed = maxTwistAngularSpeed,
+            lastTwistDecision = lastTwistDecision,
+            lastTwist = lastTwist,
             lastKeyEvent = lastKeyEvent,
             lastQuadTap = lastQuadTap,
             lastError = lastError,
@@ -308,6 +429,11 @@ object DiagnosticStore {
             maxShakeAcceleration = maxShakeAcceleration,
             lastShakeDecision = lastShakeDecision,
             lastShake = lastShake,
+            twistSensorState = twistSensorState,
+            lastTwistSensorEvent = lastTwistSensorEvent,
+            maxTwistAngularSpeed = maxTwistAngularSpeed,
+            lastTwistDecision = lastTwistDecision,
+            lastTwist = lastTwist,
             lastKeyEvent = lastKeyEvent,
             lastQuadTap = lastQuadTap,
             lastError = lastError,
@@ -324,6 +450,11 @@ object DiagnosticStore {
             maxShakeAcceleration = NOT_RECORDED,
             lastShakeDecision = NOT_RECORDED,
             lastShake = NOT_RECORDED,
+            twistSensorState = NOT_RECORDED,
+            lastTwistSensorEvent = NOT_RECORDED,
+            maxTwistAngularSpeed = NOT_RECORDED,
+            lastTwistDecision = NOT_RECORDED,
+            lastTwist = NOT_RECORDED,
             lastKeyEvent = NOT_RECORDED,
             lastQuadTap = NOT_RECORDED,
             lastError = detail,
@@ -423,6 +554,11 @@ object DiagnosticStore {
         maxShakeAcceleration: String,
         lastShakeDecision: String,
         lastShake: String,
+        twistSensorState: String,
+        lastTwistSensorEvent: String,
+        maxTwistAngularSpeed: String,
+        lastTwistDecision: String,
+        lastTwist: String,
         lastKeyEvent: String,
         lastQuadTap: String,
         lastError: String,
@@ -455,6 +591,21 @@ object DiagnosticStore {
         appendLine()
         appendLine("lastShake:")
         appendLine(lastShake)
+        appendLine()
+        appendLine("twistSensorState:")
+        appendLine(twistSensorState)
+        appendLine()
+        appendLine("lastTwistSensorEvent:")
+        appendLine(lastTwistSensorEvent)
+        appendLine()
+        appendLine("maxTwistAngularSpeed:")
+        appendLine(maxTwistAngularSpeed)
+        appendLine()
+        appendLine("lastTwistDecision:")
+        appendLine(lastTwistDecision)
+        appendLine()
+        appendLine("lastTwist:")
+        appendLine(lastTwist)
         appendLine()
         appendLine("lastKeyEvent:")
         appendLine(lastKeyEvent)

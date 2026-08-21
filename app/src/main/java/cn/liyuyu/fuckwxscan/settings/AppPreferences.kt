@@ -11,10 +11,12 @@ object AppPreferences {
     private const val PREFERENCES_NAME = "qr_volume_gesture_preferences"
     private const val KEY_AUTO_COPY = "auto_copy"
     const val KEY_SHAKE_TRIGGER = "shake_trigger"
+    const val KEY_WRIST_TWIST_TRIGGER = "wrist_twist_trigger"
 
     // This is a conservative MVP default, not a final product decision.
     const val DEFAULT_AUTO_COPY = false
     const val DEFAULT_SHAKE_TRIGGER = false
+    const val DEFAULT_WRIST_TWIST_TRIGGER = false
 
     fun isAutoCopyEnabled(context: Context): Boolean {
         return sharedPreferences(context).getBoolean(KEY_AUTO_COPY, DEFAULT_AUTO_COPY)
@@ -33,6 +35,17 @@ object AppPreferences {
 
     fun setShakeTriggerEnabled(context: Context, enabled: Boolean) {
         sharedPreferences(context).edit().putBoolean(KEY_SHAKE_TRIGGER, enabled).apply()
+    }
+
+    fun isWristTwistTriggerEnabled(context: Context): Boolean {
+        return sharedPreferences(context).getBoolean(
+            KEY_WRIST_TWIST_TRIGGER,
+            DEFAULT_WRIST_TWIST_TRIGGER,
+        )
+    }
+
+    fun setWristTwistTriggerEnabled(context: Context, enabled: Boolean) {
+        sharedPreferences(context).edit().putBoolean(KEY_WRIST_TWIST_TRIGGER, enabled).apply()
     }
 
     fun sharedPreferences(context: Context): SharedPreferences =

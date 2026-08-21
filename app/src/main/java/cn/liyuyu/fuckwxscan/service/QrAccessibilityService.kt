@@ -27,6 +27,7 @@ import cn.liyuyu.fuckwxscan.capture.ScreenCaptureFacade
 import cn.liyuyu.fuckwxscan.diagnostics.DiagnosticStore
 import cn.liyuyu.fuckwxscan.gesture.ShakeGestureDetector
 import cn.liyuyu.fuckwxscan.gesture.VolumeQuadTapDetector
+import cn.liyuyu.fuckwxscan.gesture.WristTwistGestureDetector
 import cn.liyuyu.fuckwxscan.overlay.MultiQrOverlayController
 import cn.liyuyu.fuckwxscan.qr.QrDecoder
 import cn.liyuyu.fuckwxscan.result.QrResultDispatcher
@@ -47,6 +48,7 @@ class QrAccessibilityService : AccessibilityService(), SensorEventListener,
     SharedPreferences.OnSharedPreferenceChangeListener {
     private val detector = VolumeQuadTapDetector()
     private val shakeDetector = ShakeGestureDetector()
+    private val wristTwistDetector = WristTwistGestureDetector()
     private val serviceScope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
     private val captureFacade by lazy { ScreenCaptureFacade(this) }
     private val multiQrOverlayControllerDelegate = lazy { MultiQrOverlayController(this) }
@@ -66,6 +68,8 @@ class QrAccessibilityService : AccessibilityService(), SensorEventListener,
     private var accessibilityConnected = false
     private var shakeSensor: Sensor? = null
     private var shakeSensorRegistered = false
+    private var twistSensor: Sensor? = null
+    private var twistSensorRegistered = false
     private var gravityInitialized = false
     private val gravity = FloatArray(3)
     private var lastAccelerometerTimestampNs = UNSET_TIME
@@ -73,6 +77,10 @@ class QrAccessibilityService : AccessibilityService(), SensorEventListener,
     private var lastMotionDiagnosticTimeMs = UNSET_TIME
     private var maxObservedShakeAccelerationMps2 = 0f
     private var lastRecordedShakeDiagnosticSequence = 0L
+    private var twistSensorDiagnosticSamplePending = true
+    private var lastTwistDiagnosticTimeMs = UNSET_TIME
+    private var maxObservedTwistAngularSpeedRadPerSecond = 0f
+    private var lastRecordedTwistDiagnosticSequence = 0L
 
     override fun onCreate() {
         DiagnosticStore.markServiceStarting(this, "onCreate 開始")
@@ -97,6 +105,7 @@ class QrAccessibilityService : AccessibilityService(), SensorEventListener,
             accessibilityConnected = true
             DiagnosticStore.markServiceConnected(this)
             configureShakeSensor()
+            configureTwistSensor()
         } catch (error: Throwable) {
             accessibilityConnected = false
             DiagnosticStore.recordError(this, "AccessibilityService.onServiceConnected", error)
@@ -109,6 +118,7 @@ class QrAccessibilityService : AccessibilityService(), SensorEventListener,
     override fun onInterrupt() {
         detector.reset()
         shakeDetector.reset()
+        wristTwistDetector.reset()
         if (multiQrOverlayControllerDelegate.isInitialized()) {
             multiQrOverlayController.dismiss()
         }
@@ -152,18 +162,62 @@ class QrAccessibilityService : AccessibilityService(), SensorEventListener,
         sharedPreferences: SharedPreferences?,
         key: String?,
     ) {
-        if (key == AppPreferences.KEY_SHAKE_TRIGGER) {
-            serviceScope.launch {
-                configureShakeSensor()
+        serviceScope.launch {
+            when (key) {
+                AppPreferences.KEY_SHAKE_TRIGGER -> configureShakeSensor()
+                AppPreferences.KEY_WRIST_TWIST_TRIGGER -> configureTwistSensor()
             }
         }
     }
 
     override fun onSensorChanged(event: SensorEvent) {
-        if (!shakeSensorRegistered || event.sensor != shakeSensor || event.values.size < 3) {
+        if (event.values.size < 3) {
             return
         }
 
+        when {
+            shakeSensorRegistered && event.sensor == shakeSensor -> handleShakeSensorEvent(event)
+            twistSensorRegistered && event.sensor == twistSensor -> handleTwistSensorEvent(event)
+        }
+    }
+
+    override fun onAccuracyChanged(sensor: Sensor?, accuracy: Int) {
+        val activeSensor = sensor ?: return
+        val accuracyName = when (accuracy) {
+            SensorManager.SENSOR_STATUS_ACCURACY_HIGH -> "HIGH"
+            SensorManager.SENSOR_STATUS_ACCURACY_MEDIUM -> "MEDIUM"
+            SensorManager.SENSOR_STATUS_ACCURACY_LOW -> "LOW"
+            SensorManager.SENSOR_STATUS_UNRELIABLE -> "UNRELIABLE"
+            else -> "UNKNOWN($accuracy)"
+        }
+        when {
+            shakeSensorRegistered && activeSensor == shakeSensor ->
+                DiagnosticStore.recordSensorState(
+                    this,
+                    "監視中：${describeShakeSensor(activeSensor)}、accuracy=$accuracyName",
+                )
+            twistSensorRegistered && activeSensor == twistSensor ->
+                DiagnosticStore.recordTwistSensorState(
+                    this,
+                    "監視中：${describeTwistSensor(activeSensor)}、accuracy=$accuracyName",
+                )
+        }
+    }
+
+    override fun onDestroy() {
+        accessibilityConnected = false
+        unregisterShakeSensor()
+        unregisterTwistSensor()
+        appPreferences.unregisterOnSharedPreferenceChangeListener(this)
+        if (multiQrOverlayControllerDelegate.isInitialized()) {
+            multiQrOverlayController.dismiss()
+        }
+        DiagnosticStore.markServiceStopped(this, "サービス破棄（onDestroy）")
+        serviceScope.cancel()
+        super.onDestroy()
+    }
+
+    private fun handleShakeSensorEvent(event: SensorEvent) {
         val linearAcceleration = extractLinearAcceleration(event) ?: return
         val eventTimeMs = event.timestamp / NANOS_PER_MILLISECOND
         val magnitude = accelerationMagnitude(linearAcceleration)
@@ -194,34 +248,35 @@ class QrAccessibilityService : AccessibilityService(), SensorEventListener,
         }
     }
 
-    override fun onAccuracyChanged(sensor: Sensor?, accuracy: Int) {
-        val activeSensor = sensor ?: return
-        if (!shakeSensorRegistered || activeSensor != shakeSensor) {
+    private fun handleTwistSensorEvent(event: SensorEvent) {
+        val angularVelocity = event.values
+        val eventTimeMs = event.timestamp / NANOS_PER_MILLISECOND
+        val angularSpeed = vectorMagnitude(angularVelocity)
+        recordTwistSensorDiagnosticIfNeeded(
+            event.sensor,
+            angularVelocity,
+            angularSpeed,
+            eventTimeMs,
+        )
+
+        if (!powerManager.isInteractive || keyguardManager.isKeyguardLocked) {
+            wristTwistDetector.reset()
             return
         }
-        val accuracyName = when (accuracy) {
-            SensorManager.SENSOR_STATUS_ACCURACY_HIGH -> "HIGH"
-            SensorManager.SENSOR_STATUS_ACCURACY_MEDIUM -> "MEDIUM"
-            SensorManager.SENSOR_STATUS_ACCURACY_LOW -> "LOW"
-            SensorManager.SENSOR_STATUS_UNRELIABLE -> "UNRELIABLE"
-            else -> "UNKNOWN($accuracy)"
-        }
-        DiagnosticStore.recordSensorState(
-            this,
-            "監視中：${describeSensor(activeSensor)}、accuracy=$accuracyName",
-        )
-    }
 
-    override fun onDestroy() {
-        accessibilityConnected = false
-        unregisterShakeSensor()
-        appPreferences.unregisterOnSharedPreferenceChangeListener(this)
-        if (multiQrOverlayControllerDelegate.isInitialized()) {
-            multiQrOverlayController.dismiss()
+        recordTwistMaximumIfNeeded(angularSpeed, eventTimeMs)
+        val detected = wristTwistDetector.onSample(
+            x = angularVelocity[0],
+            y = angularVelocity[1],
+            z = angularVelocity[2],
+            eventTimeMs = eventTimeMs,
+        )
+        recordTwistDiagnosticIfChanged()
+        if (detected) {
+            Log.i(TAG, "Wrist twist gesture detected")
+            DiagnosticStore.recordWristTwist(this)
+            scanCurrentScreen()
         }
-        DiagnosticStore.markServiceStopped(this, "サービス破棄（onDestroy）")
-        serviceScope.cancel()
-        super.onDestroy()
     }
 
     private fun configureShakeSensor() {
@@ -261,7 +316,7 @@ class QrAccessibilityService : AccessibilityService(), SensorEventListener,
             DiagnosticStore.resetShakeDetectorDiagnostics(this)
             DiagnosticStore.recordSensorState(
                 this,
-                "監視中：${describeSensor(sensor)}",
+                "監視中：${describeShakeSensor(sensor)}",
             )
         } catch (error: Throwable) {
             shakeSensorRegistered = false
@@ -274,7 +329,7 @@ class QrAccessibilityService : AccessibilityService(), SensorEventListener,
     private fun unregisterShakeSensor() {
         if (shakeSensorRegistered) {
             try {
-                sensorManager.unregisterListener(this)
+                shakeSensor?.let { sensorManager.unregisterListener(this, it) }
             } catch (error: Throwable) {
                 DiagnosticStore.recordError(this, "振動センサー解除", error)
             }
@@ -282,6 +337,65 @@ class QrAccessibilityService : AccessibilityService(), SensorEventListener,
         shakeSensorRegistered = false
         shakeSensor = null
         resetSensorState()
+    }
+
+    private fun configureTwistSensor() {
+        if (!accessibilityConnected) {
+            return
+        }
+        if (!AppPreferences.isWristTwistTriggerEnabled(this)) {
+            unregisterTwistSensor()
+            DiagnosticStore.recordTwistSensorState(this, "無効：設定が OFF")
+            return
+        }
+        if (twistSensorRegistered) {
+            return
+        }
+
+        val sensor = sensorManager.getDefaultSensor(Sensor.TYPE_GYROSCOPE)
+        if (sensor == null) {
+            DiagnosticStore.recordTwistSensorState(this, "利用不可：ジャイロセンサーなし")
+            return
+        }
+
+        try {
+            resetTwistSensorState()
+            twistSensor = sensor
+            twistSensorRegistered = sensorManager.registerListener(
+                this,
+                sensor,
+                SensorManager.SENSOR_DELAY_GAME,
+            )
+            if (!twistSensorRegistered) {
+                twistSensor = null
+                DiagnosticStore.recordTwistSensorState(this, "登録失敗：${sensor.name}")
+                return
+            }
+
+            DiagnosticStore.resetTwistDetectorDiagnostics(this)
+            DiagnosticStore.recordTwistSensorState(
+                this,
+                "監視中：${describeTwistSensor(sensor)}",
+            )
+        } catch (error: Throwable) {
+            twistSensorRegistered = false
+            twistSensor = null
+            DiagnosticStore.recordTwistSensorState(this, "登録例外：${sensor.name}")
+            DiagnosticStore.recordError(this, "ひねりセンサー登録", error)
+        }
+    }
+
+    private fun unregisterTwistSensor() {
+        if (twistSensorRegistered) {
+            try {
+                twistSensor?.let { sensorManager.unregisterListener(this, it) }
+            } catch (error: Throwable) {
+                DiagnosticStore.recordError(this, "ひねりセンサー解除", error)
+            }
+        }
+        twistSensorRegistered = false
+        twistSensor = null
+        resetTwistSensorState()
     }
 
     private fun resetSensorState() {
@@ -295,7 +409,15 @@ class QrAccessibilityService : AccessibilityService(), SensorEventListener,
         lastRecordedShakeDiagnosticSequence = 0L
     }
 
-    private fun describeSensor(sensor: Sensor): String {
+    private fun resetTwistSensorState() {
+        wristTwistDetector.reset()
+        twistSensorDiagnosticSamplePending = true
+        lastTwistDiagnosticTimeMs = UNSET_TIME
+        maxObservedTwistAngularSpeedRadPerSecond = 0f
+        lastRecordedTwistDiagnosticSequence = 0L
+    }
+
+    private fun describeShakeSensor(sensor: Sensor): String {
         val source = if (sensor.type == Sensor.TYPE_LINEAR_ACCELERATION) {
             "線形加速度"
         } else {
@@ -303,6 +425,9 @@ class QrAccessibilityService : AccessibilityService(), SensorEventListener,
         }
         return "${sensor.name}（$source、wakeUp=${sensor.isWakeUpSensor}）"
     }
+
+    private fun describeTwistSensor(sensor: Sensor): String =
+        "${sensor.name}（ジャイロ、wakeUp=${sensor.isWakeUpSensor}）"
 
     private fun extractLinearAcceleration(event: SensorEvent): FloatArray? {
         if (event.sensor.type == Sensor.TYPE_LINEAR_ACCELERATION) {
@@ -373,6 +498,46 @@ class QrAccessibilityService : AccessibilityService(), SensorEventListener,
             acceleration[2] * acceleration[2],
     )
 
+    private fun vectorMagnitude(vector: FloatArray): Float = sqrt(
+        vector[0] * vector[0] +
+            vector[1] * vector[1] +
+            vector[2] * vector[2],
+    )
+
+    private fun recordTwistSensorDiagnosticIfNeeded(
+        sensor: Sensor,
+        angularVelocity: FloatArray,
+        angularSpeed: Float,
+        eventTimeMs: Long,
+    ) {
+        val deliberateRotation =
+            angularSpeed >= WristTwistGestureDetector.DEFAULT_RELEASE_THRESHOLD_RAD_PER_SECOND
+        val diagnosticIntervalElapsed = lastTwistDiagnosticTimeMs == UNSET_TIME ||
+            eventTimeMs - lastTwistDiagnosticTimeMs >= MOTION_DIAGNOSTIC_INTERVAL_MS
+        if (
+            !twistSensorDiagnosticSamplePending &&
+            !(deliberateRotation && diagnosticIntervalElapsed)
+        ) {
+            return
+        }
+
+        twistSensorDiagnosticSamplePending = false
+        lastTwistDiagnosticTimeMs = eventTimeMs
+        DiagnosticStore.recordTwistSensorSample(
+            this,
+            String.format(
+                Locale.US,
+                "%s angular=(%.2f, %.2f, %.2f) speed=%.2f rad/s eventTime=%d",
+                sensor.name,
+                angularVelocity[0],
+                angularVelocity[1],
+                angularVelocity[2],
+                angularSpeed,
+                eventTimeMs,
+            ),
+        )
+    }
+
     private fun recordShakeMaximumIfNeeded(magnitude: Float, eventTimeMs: Long) {
         if (magnitude < maxObservedShakeAccelerationMps2 + MAXIMUM_RECORD_STEP_MPS2) {
             return
@@ -390,6 +555,26 @@ class QrAccessibilityService : AccessibilityService(), SensorEventListener,
         )
     }
 
+    private fun recordTwistMaximumIfNeeded(angularSpeed: Float, eventTimeMs: Long) {
+        if (
+            angularSpeed <
+            maxObservedTwistAngularSpeedRadPerSecond + MAXIMUM_TWIST_RECORD_STEP_RAD_PER_SECOND
+        ) {
+            return
+        }
+        maxObservedTwistAngularSpeedRadPerSecond = angularSpeed
+        DiagnosticStore.recordTwistMaximum(
+            this,
+            String.format(
+                Locale.US,
+                "maximum=%.2f rad/s threshold=%.2f rad/s eventTime=%d",
+                angularSpeed,
+                WristTwistGestureDetector.DEFAULT_FIRST_PEAK_THRESHOLD_RAD_PER_SECOND,
+                eventTimeMs,
+            ),
+        )
+    }
+
     private fun recordShakeDiagnosticIfChanged() {
         val event = shakeDetector.lastDiagnosticEvent ?: return
         if (event.sequence == lastRecordedShakeDiagnosticSequence) {
@@ -397,6 +582,15 @@ class QrAccessibilityService : AccessibilityService(), SensorEventListener,
         }
         lastRecordedShakeDiagnosticSequence = event.sequence
         DiagnosticStore.recordShakeDecision(this, formatShakeDiagnostic(event))
+    }
+
+    private fun recordTwistDiagnosticIfChanged() {
+        val event = wristTwistDetector.lastDiagnosticEvent ?: return
+        if (event.sequence == lastRecordedTwistDiagnosticSequence) {
+            return
+        }
+        lastRecordedTwistDiagnosticSequence = event.sequence
+        DiagnosticStore.recordTwistDecision(this, formatTwistDiagnostic(event))
     }
 
     private fun formatShakeDiagnostic(event: ShakeGestureDetector.DiagnosticEvent): String {
@@ -447,6 +641,74 @@ class QrAccessibilityService : AccessibilityService(), SensorEventListener,
 
     private fun formatMagnitude(value: Float?): String =
         value?.let { String.format(Locale.US, "%.1f", it) } ?: "none"
+
+    private fun formatTwistDiagnostic(
+        event: WristTwistGestureDetector.DiagnosticEvent,
+    ): String {
+        val sample = formatAngularSpeed(event.sampleSpeedRadPerSecond)
+        val first = formatAngularSpeed(event.firstPeakRadPerSecond)
+        val returning = formatAngularSpeed(event.returnPeakRadPerSecond)
+        val outboundAngle = formatAngle(event.outboundAngleRad)
+        val returnAngle = formatAngle(event.returnAngleRad)
+        val elapsed = event.elapsedMs?.toString() ?: "none"
+        val cosine = event.cosine?.let { String.format(Locale.US, "%.2f", it) } ?: "none"
+        val firstThreshold = formatAngularSpeed(
+            WristTwistGestureDetector.DEFAULT_FIRST_PEAK_THRESHOLD_RAD_PER_SECOND,
+        )
+        val returnThreshold = formatAngularSpeed(
+            WristTwistGestureDetector.DEFAULT_RETURN_PEAK_THRESHOLD_RAD_PER_SECOND,
+        )
+        val releaseThreshold = formatAngularSpeed(
+            WristTwistGestureDetector.DEFAULT_RELEASE_THRESHOLD_RAD_PER_SECOND,
+        )
+        val minimumOutboundAngle = formatAngle(
+            WristTwistGestureDetector.DEFAULT_MINIMUM_OUTBOUND_ANGLE_RAD,
+        )
+        val minimumReturnAngle = formatAngle(
+            WristTwistGestureDetector.DEFAULT_MINIMUM_RETURN_ANGLE_RAD,
+        )
+        val maximumOutboundDuration =
+            WristTwistGestureDetector.DEFAULT_MAXIMUM_OUTBOUND_DURATION_MS
+        val maximumReturnDuration = WristTwistGestureDetector.DEFAULT_MAXIMUM_RETURN_DURATION_MS
+        val requiredCosine = String.format(
+            Locale.US,
+            "%.2f",
+            WristTwistGestureDetector.DEFAULT_MAXIMUM_OPPOSING_COSINE,
+        )
+        val detail = when (event.stage) {
+            WristTwistGestureDetector.DiagnosticStage.FIRST_PEAK ->
+                "第1回転受付：first=$first threshold=$firstThreshold rad/s"
+            WristTwistGestureDetector.DiagnosticStage.OUTBOUND_RELEASED ->
+                "往路完了：first=$first angle=$outboundAngle rad " +
+                    "required>=$minimumOutboundAngle releaseSample=$sample " +
+                    "required<=$releaseThreshold rad/s"
+            WristTwistGestureDetector.DiagnosticStage.OUTBOUND_TOO_SHORT ->
+                "不成立：往路角度不足 first=$first angle=$outboundAngle rad " +
+                    "required>=$minimumOutboundAngle"
+            WristTwistGestureDetector.DiagnosticStage.OUTBOUND_TIMEOUT ->
+                "不成立：往路時間切れ first=$first elapsed=${elapsed}ms " +
+                    "max=${maximumOutboundDuration}ms"
+            WristTwistGestureDetector.DiagnosticStage.RETURN_TIMEOUT ->
+                "不成立：復路時間切れ first=$first return=$returning " +
+                    "returnAngle=$returnAngle rad required>=$minimumReturnAngle " +
+                    "elapsed=${elapsed}ms max=${maximumReturnDuration}ms"
+            WristTwistGestureDetector.DiagnosticStage.DIRECTION_REJECTED ->
+                "復路候補を棄却：方向反転不足 first=$first return=$returning " +
+                    "returnThreshold=$returnThreshold cosine=$cosine " +
+                    "required<=$requiredCosine"
+            WristTwistGestureDetector.DiagnosticStage.DETECTED ->
+                "成立：first=$first return=$returning outboundAngle=$outboundAngle rad " +
+                    "returnAngle=$returnAngle rad elapsed=${elapsed}ms cosine=$cosine " +
+                    "required<=$requiredCosine"
+        }
+        return "seq=${event.sequence} $detail"
+    }
+
+    private fun formatAngularSpeed(value: Float?): String =
+        value?.let { String.format(Locale.US, "%.2f", it) } ?: "none"
+
+    private fun formatAngle(value: Float?): String =
+        value?.let { String.format(Locale.US, "%.2f", it) } ?: "none"
 
     private fun scanCurrentScreen() {
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.R) {
@@ -577,5 +839,6 @@ class QrAccessibilityService : AccessibilityService(), SensorEventListener,
         private const val MAX_FILTER_INTERVAL_SECONDS = 1f
         private const val MOTION_DIAGNOSTIC_INTERVAL_MS = 500L
         private const val MAXIMUM_RECORD_STEP_MPS2 = 0.1f
+        private const val MAXIMUM_TWIST_RECORD_STEP_RAD_PER_SECOND = 0.05f
     }
 }
