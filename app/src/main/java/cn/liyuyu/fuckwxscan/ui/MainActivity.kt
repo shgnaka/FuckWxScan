@@ -68,6 +68,7 @@ class MainActivity : ComponentActivity() {
     private var accessibilityEnabled by mutableStateOf(false)
     private var autoCopyEnabled by mutableStateOf(false)
     private var shakeTriggerEnabled by mutableStateOf(false)
+    private var wristTwistTriggerEnabled by mutableStateOf(false)
     private var legacyProjectionReady by mutableStateOf(false)
     private var diagnosticSnapshot by mutableStateOf(DiagnosticSnapshot.empty())
     private var captureAfterProjectionGrant = false
@@ -116,6 +117,7 @@ class MainActivity : ComponentActivity() {
 
         autoCopyEnabled = AppPreferences.isAutoCopyEnabled(this)
         shakeTriggerEnabled = AppPreferences.isShakeTriggerEnabled(this)
+        wristTwistTriggerEnabled = AppPreferences.isWristTwistTriggerEnabled(this)
         legacyProjectionReady = App.screenCaptureIntentResult != null
         refreshDiagnostics()
         showSetupScreen()
@@ -125,6 +127,7 @@ class MainActivity : ComponentActivity() {
         super.onResume()
         accessibilityEnabled = isAccessibilityServiceEnabled()
         shakeTriggerEnabled = AppPreferences.isShakeTriggerEnabled(this)
+        wristTwistTriggerEnabled = AppPreferences.isWristTwistTriggerEnabled(this)
         legacyProjectionReady = App.screenCaptureIntentResult != null
         refreshDiagnostics()
     }
@@ -136,6 +139,7 @@ class MainActivity : ComponentActivity() {
                     accessibilityEnabled = accessibilityEnabled,
                     autoCopyEnabled = autoCopyEnabled,
                     shakeTriggerEnabled = shakeTriggerEnabled,
+                    wristTwistTriggerEnabled = wristTwistTriggerEnabled,
                     legacyProjectionReady = legacyProjectionReady,
                     diagnosticSnapshot = diagnosticSnapshot,
                     onOpenAccessibilitySettings = {
@@ -148,6 +152,10 @@ class MainActivity : ComponentActivity() {
                     onShakeTriggerChanged = { enabled ->
                         shakeTriggerEnabled = enabled
                         AppPreferences.setShakeTriggerEnabled(this, enabled)
+                    },
+                    onWristTwistTriggerChanged = { enabled ->
+                        wristTwistTriggerEnabled = enabled
+                        AppPreferences.setWristTwistTriggerEnabled(this, enabled)
                     },
                     onPrepareLegacyCapture = {
                         requestLegacyProjection(startCaptureAfterGrant = false)
@@ -204,11 +212,13 @@ private fun SetupScreen(
     accessibilityEnabled: Boolean,
     autoCopyEnabled: Boolean,
     shakeTriggerEnabled: Boolean,
+    wristTwistTriggerEnabled: Boolean,
     legacyProjectionReady: Boolean,
     diagnosticSnapshot: DiagnosticSnapshot,
     onOpenAccessibilitySettings: () -> Unit,
     onAutoCopyChanged: (Boolean) -> Unit,
     onShakeTriggerChanged: (Boolean) -> Unit,
+    onWristTwistTriggerChanged: (Boolean) -> Unit,
     onPrepareLegacyCapture: () -> Unit,
     onRefreshDiagnostics: () -> Unit,
     onCopyDiagnostics: () -> Unit,
@@ -293,6 +303,24 @@ private fun SetupScreen(
                 style = MaterialTheme.typography.body2,
             )
 
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Text(
+                    text = stringResource(R.string.wrist_twist_trigger_label),
+                    modifier = Modifier.weight(1f),
+                )
+                Switch(
+                    checked = wristTwistTriggerEnabled,
+                    onCheckedChange = onWristTwistTriggerChanged,
+                )
+            }
+            Text(
+                text = stringResource(R.string.wrist_twist_trigger_description),
+                style = MaterialTheme.typography.body2,
+            )
+
             if (Build.VERSION.SDK_INT < Build.VERSION_CODES.R) {
                 Divider()
                 Text(
@@ -361,6 +389,26 @@ private fun SetupScreen(
             DiagnosticValue(
                 label = stringResource(R.string.diagnostic_last_shake),
                 value = diagnosticSnapshot.lastShake,
+            )
+            DiagnosticValue(
+                label = stringResource(R.string.diagnostic_twist_sensor_state),
+                value = diagnosticSnapshot.twistSensorState,
+            )
+            DiagnosticValue(
+                label = stringResource(R.string.diagnostic_last_twist_sensor_event),
+                value = diagnosticSnapshot.lastTwistSensorEvent,
+            )
+            DiagnosticValue(
+                label = stringResource(R.string.diagnostic_max_twist_angular_speed),
+                value = diagnosticSnapshot.maxTwistAngularSpeed,
+            )
+            DiagnosticValue(
+                label = stringResource(R.string.diagnostic_last_twist_decision),
+                value = diagnosticSnapshot.lastTwistDecision,
+            )
+            DiagnosticValue(
+                label = stringResource(R.string.diagnostic_last_twist),
+                value = diagnosticSnapshot.lastTwist,
             )
             DiagnosticValue(
                 label = stringResource(R.string.diagnostic_last_key_event),

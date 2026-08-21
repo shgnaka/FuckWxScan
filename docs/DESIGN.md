@@ -4,7 +4,7 @@
 
 ## 目的
 
-ブラウザ、SNS、チャット、画像ビューアなどで QR コードを見つけた際、アプリへ切り替えず、音量上ボタンの高速 4 連打だけで読み取ります。
+ブラウザ、SNS、チャット、画像ビューアなどで QR コードを見つけた際、アプリへ切り替えず、設定した物理操作で読み取ります。
 
 ## 決定済み
 
@@ -19,12 +19,17 @@
 - QR デコードは既存 `BarcodeUtil.decodeQRCode()` を再利用
 - 1 件は即処理、複数件は元アプリの位置選択 UI
 - 自動コピーは設定可能。MVP の暫定初期値は OFF
+- 実験機能として線形加速度による振り判定と、ジャイロによる手首ひねり判定を個別に設定可能
+- 手首ひねりは、一方向への回転、停止、同じ軸の反対方向への回転を短時間に行った場合だけ成立
+- ジャイロがない端末では手首ひねりを利用不可とし、音量操作と振り判定は維持
 
 ## 構成
 
 ```text
 QrAccessibilityService
   -> VolumeQuadTapDetector
+  -> ShakeGestureDetector
+  -> WristTwistGestureDetector
   -> ScreenCaptureFacade
        -> AccessibilityScreenCapture (API 30+)
        -> CaptureService / MediaProjection (API 24-29)
@@ -57,6 +62,8 @@ QrAccessibilityService
 6. 自動コピーの既定値
 7. WeChat / Alipay 特殊処理を一般 URL 処理へ統一するか
 8. API 34 以降でウィンドウ単位スクリーンショットを使うか
+9. 手首ひねりの回転速度、積算角度、往路・復路時間を実機ログから調整
+10. 振り判定と手首ひねり判定を同時に有効にした場合の誤発動と消費電力
 
 ## 検証状況と次作業
 
