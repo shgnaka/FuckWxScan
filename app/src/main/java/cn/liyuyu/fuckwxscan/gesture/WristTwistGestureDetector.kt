@@ -222,9 +222,6 @@ class WristTwistGestureDetector(
                 cosine = returnPeak?.let { peak -> cosineBetween(requireNotNull(firstPeak), peak) },
             )
             clearCandidate()
-            if (speed >= firstPeakThresholdRadPerSecond) {
-                startCandidate(x, y, z, speed, eventTimeMs)
-            }
             return false
         }
 

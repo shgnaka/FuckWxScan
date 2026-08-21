@@ -93,9 +93,7 @@ class WristTwistGestureDetectorTest {
         assertFalse(detector.onSample(3f, 3f, 0f, 50L))
         assertFalse(detector.onSample(2f, 2f, 0f, 100L))
         assertFalse(detector.onSample(0f, 0f, 0f, 150L))
-        assertFalse(detector.onSample(-2f, -2f, 0f, 200L))
-
-        assertTrue(detector.onSample(-2f, -2f, 0f, 250L))
+        assertTrue(detector.onSample(-2f, -2f, 0f, 200L))
     }
 
     @Test
