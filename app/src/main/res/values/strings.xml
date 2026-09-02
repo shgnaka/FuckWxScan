@@ -1,5 +1,7 @@
 <resources>
-    <string name="app_name">扫你码</string>
-    <string name="notification_title">扫你码</string>
-    <string name="notification_sub_title">快来扫吧~</string>
+    <string name="app_name">スクショ QR リーダー</string>
+    <string name="notification_title">スクショ QR リーダー</string>
+    <string name="notification_sub_title">スクリーンショットを確認しています</string>
+    <string name="accessibility_service_name">スクショ後 QR 読み取り</string>
+    <string name="accessibility_service_description">標準のスクリーンショットがメディアへ保存された後、直近の画像だけを確認します。QR コードが見つかった場合だけ、読み取りまたはスクショ保存の選択肢を表示します。スクショ開始操作や通常の画面操作は横取りしません。</string>
 </resources>

@@ -1,10 +1,13 @@
 package cn.liyuyu.fuckwxscan.ui
 
-import android.app.Activity
+import android.Manifest
+import android.content.ComponentName
 import android.content.Intent
-import android.media.projection.MediaProjectionManager
+import android.content.pm.PackageManager
 import android.net.Uri
+import android.os.Build
 import android.os.Bundle
+import android.provider.Settings
 import androidx.activity.ComponentActivity
 import androidx.activity.OnBackPressedCallback
 import androidx.activity.compose.setContent
@@ -31,21 +34,35 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.core.content.ContextCompat
 import androidx.core.view.WindowCompat
-import cn.liyuyu.fuckwxscan.App
 import cn.liyuyu.fuckwxscan.R
 import cn.liyuyu.fuckwxscan.data.BarcodeResult
 import cn.liyuyu.fuckwxscan.data.ResultType
-import cn.liyuyu.fuckwxscan.service.CaptureService
+import cn.liyuyu.fuckwxscan.service.ScreenshotAccessibilityService
 import cn.liyuyu.fuckwxscan.ui.theme.FuckWxScanTheme
 import cn.liyuyu.fuckwxscan.ui.theme.HintMask
-import cn.liyuyu.fuckwxscan.utils.*
+import cn.liyuyu.fuckwxscan.utils.BarcodeUtil
+import cn.liyuyu.fuckwxscan.utils.ScreenUtil
+import cn.liyuyu.fuckwxscan.utils.parcelable
+import cn.liyuyu.fuckwxscan.utils.parcelableArrayList
+import cn.liyuyu.fuckwxscan.utils.showToast
 
 class MainActivity : ComponentActivity() {
-
     companion object {
         const val EXTRA_BARCODE_RESULTS = "extra_barcode_results"
         const val EXTRA_BARCODE_BITMAP = "extra_barcode_bitmap"
+    }
+
+    private val imagePermissionLauncher = registerForActivityResult(
+        ActivityResultContracts.RequestMultiplePermissions(),
+    ) { grants ->
+        if (grants.values.all { it }) {
+            continueMonitorSetup()
+        } else {
+            showToast("写真と動画の読み取りを許可してください")
+            finish()
+        }
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -66,26 +83,54 @@ class MainActivity : ComponentActivity() {
             }
             return
         }
-        if (App.screenCaptureIntentResult == null) {
-            val mediaProjectionManager: MediaProjectionManager by lazy {
-                getSystemService(
-                    MEDIA_PROJECTION_SERVICE
-                ) as MediaProjectionManager
-            }
-            registerForActivityResult(ActivityResultContracts.StartActivityForResult()) {
-                if (it.resultCode == Activity.RESULT_OK) {
-                    App.screenCaptureIntentResult = it.data
-                    startService(Intent(this, CaptureService::class.java))
-                } else {
-                    App.screenCaptureIntentResult = null
-                    showToast("取消识别~")
-                }
-                this.finish()
-            }.launch(mediaProjectionManager.createScreenCaptureIntent())
-        } else {
-            startService(Intent(this, CaptureService::class.java))
-            finish()
+        startMonitorSetup()
+    }
+
+    private fun startMonitorSetup() {
+        if (!hasImageReadPermission()) {
+            imagePermissionLauncher.launch(requiredImagePermissions())
+            return
         }
+        continueMonitorSetup()
+    }
+
+    private fun continueMonitorSetup() {
+        if (!isAccessibilityServiceEnabled()) {
+            try {
+                startActivity(Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS))
+                showToast("ユーザー補助設定でスクショ後 QR 読み取りを有効にしてください")
+            } catch (_: Exception) {
+                showToast("ユーザー補助設定を開けませんでした")
+            }
+        } else {
+            showToast("スクショ後に QR コードを確認します")
+        }
+        finish()
+    }
+
+    private fun requiredImagePermissions(): Array<String> =
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            arrayOf(Manifest.permission.READ_MEDIA_IMAGES)
+        } else {
+            arrayOf(Manifest.permission.READ_EXTERNAL_STORAGE)
+        }
+
+    private fun hasImageReadPermission(): Boolean =
+        ContextCompat.checkSelfPermission(
+            this,
+            requiredImagePermissions().first(),
+        ) == PackageManager.PERMISSION_GRANTED
+
+    private fun isAccessibilityServiceEnabled(): Boolean {
+        val expected = ComponentName(
+            this,
+            ScreenshotAccessibilityService::class.java,
+        ).flattenToString()
+        val enabled = Settings.Secure.getString(
+            contentResolver,
+            Settings.Secure.ENABLED_ACCESSIBILITY_SERVICES,
+        ).orEmpty()
+        return enabled.split(':').any { it.equals(expected, ignoreCase = true) }
     }
 
     private fun handleText(text: String) {
@@ -95,7 +140,10 @@ class MainActivity : ComponentActivity() {
         if (resultType == ResultType.AlipayUrl) {
             val intent = Intent(Intent.ACTION_SEND).apply {
                 type = "image/*"
-                putExtra(Intent.EXTRA_STREAM, bitmapUri)
+                bitmapUri?.let {
+                    putExtra(Intent.EXTRA_STREAM, it)
+                    addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                }
                 setClassName(
                     "com.eg.android.AlipayGphone",
                     "com.alipay.mobile.quinox.splash.ShareScanQRDispenseActivity"
@@ -129,7 +177,8 @@ class MainActivity : ComponentActivity() {
         setContent {
             FuckWxScanTheme {
                 Surface(
-                    modifier = Modifier.fillMaxSize(), color = HintMask
+                    modifier = Modifier.fillMaxSize(),
+                    color = HintMask,
                 ) {
                     Box {
                         val transition = rememberInfiniteTransition()
@@ -140,7 +189,8 @@ class MainActivity : ComponentActivity() {
                                 ), repeatMode = RepeatMode.Reverse
                             )
                         )
-                        Text(text = "取消",
+                        Text(
+                            text = "取消",
                             color = Color.White,
                             fontSize = 16.sp,
                             fontWeight = FontWeight.Bold,
@@ -155,19 +205,26 @@ class MainActivity : ComponentActivity() {
                                 })
                                 .clickable {
                                     finish()
-                                })
+                                },
+                        )
                         results?.let {
                             for (result in results) {
-                                Box(modifier = Modifier
-                                    .offset(with(LocalDensity.current) { result.centerX.toDp() - 18.dp },
-                                        with(LocalDensity.current) {
-                                            result.centerY.toDp() - 18.dp
-                                        })
-                                    .size(36.dp)
-                                    .clickable {
-                                        handleText(result.text)
-                                        finish()
-                                    }, contentAlignment = Alignment.Center
+                                Box(
+                                    modifier = Modifier
+                                        .offset(
+                                            with(LocalDensity.current) {
+                                                result.centerX.toDp() - 18.dp
+                                            },
+                                            with(LocalDensity.current) {
+                                                result.centerY.toDp() - 18.dp
+                                            },
+                                        )
+                                        .size(36.dp)
+                                        .clickable {
+                                            handleText(result.text)
+                                            finish()
+                                        },
+                                    contentAlignment = Alignment.Center,
                                 ) {
                                     Image(
                                         painter = painterResource(id = R.drawable.ic_wait_click),
@@ -175,7 +232,7 @@ class MainActivity : ComponentActivity() {
                                         modifier = Modifier
                                             .clip(CircleShape)
                                             .background(Color.White)
-                                            .size(currentSize)
+                                            .size(currentSize),
                                     )
                                 }
                             }
