@@ -24,6 +24,11 @@ sealed class ActionDecision {
 }
 
 object ScanFlowPolicy {
+    val actionChoices: List<ScanAction> = listOf(
+        ScanAction.READ_QR,
+        ScanAction.SAVE_SCREENSHOT,
+    )
+
     fun afterDecode(qrCount: Int): DecodeDecision {
         require(qrCount >= 0) { "QR count must not be negative" }
         return if (qrCount == 0) {

@@ -18,8 +18,8 @@ import android.widget.LinearLayout
 import android.widget.TextView
 import androidx.activity.ComponentActivity
 import androidx.activity.OnBackPressedCallback
-import androidx.lifecycle.lifecycleScope
 import androidx.core.view.WindowCompat
+import androidx.lifecycle.lifecycleScope
 import cn.liyuyu.fuckwxscan.R
 import cn.liyuyu.fuckwxscan.capture.MediaStoreScreenshotSaver
 import cn.liyuyu.fuckwxscan.capture.TemporaryScreenshotStore
@@ -125,13 +125,21 @@ class ScreenshotActionActivity : ComponentActivity() {
             ),
         )
 
-        val readButton = createActionButton(R.string.screenshot_action_read_qr)
-        readButton.setOnClickListener { readQr() }
-        panel.addView(readButton, actionLayoutParams())
-
-        val saveButton = createActionButton(R.string.screenshot_action_save)
-        saveButton.setOnClickListener { saveScreenshot() }
-        panel.addView(saveButton, actionLayoutParams())
+        for (action in ScanFlowPolicy.actionChoices) {
+            val button = createActionButton(
+                when (action) {
+                    ScanAction.READ_QR -> R.string.screenshot_action_read_qr
+                    ScanAction.SAVE_SCREENSHOT -> R.string.screenshot_action_save
+                },
+            )
+            button.setOnClickListener {
+                when (action) {
+                    ScanAction.READ_QR -> readQr()
+                    ScanAction.SAVE_SCREENSHOT -> saveScreenshot()
+                }
+            }
+            panel.addView(button, actionLayoutParams())
+        }
 
         root.addView(
             panel,
