@@ -46,3 +46,23 @@ testDebugUnitTest
 assembleDebug
 ```
 
+
+## 診断ログ
+
+実機で反応しない場合は、 ` ScreenshotQr ` タグのログを確認します。
+
+```text
+adb logcat -v time -s ScreenshotQr:D *:S
+```
+
+正常な場合は、次の順で記録されます。
+
+1. ` Accessibility service connected `
+2. ` MediaStore observer registered `
+3. ` MediaStore onChange `
+4. ` MediaStore row `
+5. ` bitmap loaded `
+6. ` QR decode finished `
+7. ` choice overlay result=true `
+
+QR の内容自体はログに記録しません。

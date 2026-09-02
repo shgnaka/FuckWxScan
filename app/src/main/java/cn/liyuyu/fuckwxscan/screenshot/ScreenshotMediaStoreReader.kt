@@ -19,21 +19,50 @@ class ScreenshotMediaStoreReader(
 
     fun read(uri: Uri): ScreenshotMediaMetadata? {
         val queryUri = if (isItemUri(uri)) uri else collectionUri
+        ScreenshotDiagnosticLog.debug("querying MediaStore item uri=$queryUri")
         return query(queryUri)
     }
 
-    fun readLatest(): ScreenshotMediaMetadata? = query(collectionUri)
+    fun readLatest(): ScreenshotMediaMetadata? {
+        ScreenshotDiagnosticLog.debug("querying MediaStore latest image")
+        return query(collectionUri)
+    }
 
-    fun loadBitmap(uri: String): Bitmap? =
-        try {
-            contentResolver.openInputStream(Uri.parse(uri))?.use { input ->
-                BitmapFactory.decodeStream(input)
+    fun loadBitmap(uri: String): Bitmap? {
+        return try {
+            val input = contentResolver.openInputStream(Uri.parse(uri))
+            if (input == null) {
+                ScreenshotDiagnosticLog.warn(
+                    "openInputStream returned null uri=$uri",
+                )
+                null
+            } else {
+                input.use { stream ->
+                    val bitmap = BitmapFactory.decodeStream(stream)
+                    if (bitmap == null) {
+                        ScreenshotDiagnosticLog.warn(
+                            "BitmapFactory returned null uri=$uri",
+                        )
+                    } else {
+                        ScreenshotDiagnosticLog.debug(
+                            "bitmap decoded uri=$uri width=${bitmap.width} " +
+                                "height=${bitmap.height}",
+                        )
+                    }
+                    bitmap
+                }
             }
-        } catch (_: SecurityException) {
+        } catch (e: SecurityException) {
+            ScreenshotDiagnosticLog.error("bitmap permission denied uri=$uri", e)
             null
-        } catch (_: IllegalArgumentException) {
+        } catch (e: IllegalArgumentException) {
+            ScreenshotDiagnosticLog.error("bitmap URI invalid uri=$uri", e)
+            null
+        } catch (e: Exception) {
+            ScreenshotDiagnosticLog.error("bitmap read failed uri=$uri", e)
             null
         }
+    }
 
     fun isItemUri(uri: Uri): Boolean =
         uri.lastPathSegment?.toLongOrNull() != null
@@ -63,18 +92,31 @@ class ScreenshotMediaStoreReader(
                 },
             )?.use { cursor ->
                 if (!cursor.moveToFirst()) {
+                    ScreenshotDiagnosticLog.debug(
+                        "MediaStore query returned zero rows uri=$queryUri",
+                    )
                     return null
                 }
 
-                val id = cursor.longValue(MediaStore.Images.Media._ID) ?: return null
+                val id = cursor.longValue(MediaStore.Images.Media._ID) ?: run {
+                    ScreenshotDiagnosticLog.warn(
+                        "MediaStore row missing _ID uri=$queryUri",
+                    )
+                    return null
+                }
                 val dateAddedSeconds =
-                    cursor.longValue(MediaStore.Images.Media.DATE_ADDED) ?: return null
+                    cursor.longValue(MediaStore.Images.Media.DATE_ADDED) ?: run {
+                        ScreenshotDiagnosticLog.warn(
+                            "MediaStore row missing DATE_ADDED id=$id",
+                        )
+                        return null
+                    }
                 val contentUri = if (isItemUri(queryUri)) {
                     queryUri
                 } else {
                     ContentUris.withAppendedId(collectionUri, id)
                 }
-                ScreenshotMediaMetadata(
+                val metadata = ScreenshotMediaMetadata(
                     id = id,
                     uri = contentUri.toString(),
                     displayName = cursor.stringValue(MediaStore.Images.Media.DISPLAY_NAME),
@@ -91,10 +133,30 @@ class ScreenshotMediaStoreReader(
                         false
                     },
                 )
+                ScreenshotDiagnosticLog.debug(
+                    "MediaStore metadata id=${metadata.id} name=${metadata.displayName} " +
+                        "path=${metadata.relativePath} mime=${metadata.mimeType} " +
+                        "dateAddedMs=${metadata.dateAddedMs} pending=${metadata.isPending}",
+                )
+                metadata
             }
-        } catch (_: SecurityException) {
+        } catch (e: SecurityException) {
+            ScreenshotDiagnosticLog.error(
+                "MediaStore query permission denied uri=$queryUri",
+                e,
+            )
             null
-        } catch (_: IllegalArgumentException) {
+        } catch (e: IllegalArgumentException) {
+            ScreenshotDiagnosticLog.error(
+                "MediaStore query URI invalid uri=$queryUri",
+                e,
+            )
+            null
+        } catch (e: Exception) {
+            ScreenshotDiagnosticLog.error(
+                "MediaStore query failed uri=$queryUri",
+                e,
+            )
             null
         }
     }

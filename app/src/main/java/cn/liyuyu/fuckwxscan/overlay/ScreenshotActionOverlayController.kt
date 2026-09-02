@@ -10,6 +10,7 @@ import android.view.WindowManager
 import android.widget.Button
 import android.widget.FrameLayout
 import android.widget.LinearLayout
+import cn.liyuyu.fuckwxscan.screenshot.ScreenshotDiagnosticLog
 
 /**
  * Displays the two actions above the current app without requesting the
@@ -26,7 +27,8 @@ class ScreenshotActionOverlayController(
     fun show(
         onReadQr: () -> Unit,
         onKeepScreenshot: () -> Unit,
-    ) {
+    ): Boolean {
+        ScreenshotDiagnosticLog.info("choice overlay show requested")
         dismiss()
 
         val overlay = FrameLayout(service).apply {
@@ -60,6 +62,7 @@ class ScreenshotActionOverlayController(
             text = "QR を読み取る"
             minHeight = dp(48).toInt()
             setOnClickListener {
+                ScreenshotDiagnosticLog.info("choice button clicked=READ_QR")
                 dismiss()
                 onReadQr()
             }
@@ -68,6 +71,7 @@ class ScreenshotActionOverlayController(
             text = "スクショを保存"
             minHeight = dp(48).toInt()
             setOnClickListener {
+                ScreenshotDiagnosticLog.info("choice button clicked=KEEP_SCREENSHOT")
                 dismiss()
                 onKeepScreenshot()
             }
@@ -104,10 +108,16 @@ class ScreenshotActionOverlayController(
         try {
             windowManager.addView(overlay, layoutParams)
             overlay.requestFocus()
-        } catch (_: WindowManager.BadTokenException) {
+            ScreenshotDiagnosticLog.info("choice overlay attached")
+            return true
+        } catch (e: WindowManager.BadTokenException) {
+            ScreenshotDiagnosticLog.error("choice overlay BadTokenException", e)
             root = null
-        } catch (_: SecurityException) {
+            return false
+        } catch (e: SecurityException) {
+            ScreenshotDiagnosticLog.error("choice overlay SecurityException", e)
             root = null
+            return false
         }
     }
 
@@ -115,7 +125,12 @@ class ScreenshotActionOverlayController(
         val overlay = root ?: return
         root = null
         if (overlay.isAttachedToWindow) {
-            windowManager.removeView(overlay)
+            try {
+                windowManager.removeView(overlay)
+                ScreenshotDiagnosticLog.debug("choice overlay removed")
+            } catch (e: IllegalArgumentException) {
+                ScreenshotDiagnosticLog.warn("choice overlay was already removed", e)
+            }
         }
     }
 

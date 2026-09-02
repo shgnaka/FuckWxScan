@@ -40,6 +40,7 @@ import cn.liyuyu.fuckwxscan.R
 import cn.liyuyu.fuckwxscan.data.BarcodeResult
 import cn.liyuyu.fuckwxscan.data.ResultType
 import cn.liyuyu.fuckwxscan.service.ScreenshotAccessibilityService
+import cn.liyuyu.fuckwxscan.screenshot.ScreenshotDiagnosticLog
 import cn.liyuyu.fuckwxscan.ui.theme.FuckWxScanTheme
 import cn.liyuyu.fuckwxscan.ui.theme.HintMask
 import cn.liyuyu.fuckwxscan.utils.BarcodeUtil
@@ -57,7 +58,9 @@ class MainActivity : ComponentActivity() {
     private val imagePermissionLauncher = registerForActivityResult(
         ActivityResultContracts.RequestMultiplePermissions(),
     ) { grants ->
-        if (grants.values.all { it }) {
+        val granted = grants.values.all { it }
+        ScreenshotDiagnosticLog.info("image permission result granted=$granted")
+        if (granted) {
             continueMonitorSetup()
         } else {
             showToast("写真と動画の読み取りを許可してください")
@@ -67,6 +70,7 @@ class MainActivity : ComponentActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        ScreenshotDiagnosticLog.info("MainActivity created")
         WindowCompat.setDecorFitsSystemWindows(window, false)
         onBackPressedDispatcher.addCallback(this, object : OnBackPressedCallback(true) {
             override fun handleOnBackPressed() {
@@ -87,7 +91,12 @@ class MainActivity : ComponentActivity() {
     }
 
     private fun startMonitorSetup() {
-        if (!hasImageReadPermission()) {
+        val imagePermissionGranted = hasImageReadPermission()
+        ScreenshotDiagnosticLog.info(
+            "monitor setup imagePermissionGranted=$imagePermissionGranted",
+        )
+        if (!imagePermissionGranted) {
+            ScreenshotDiagnosticLog.info("requesting image read permission")
             imagePermissionLauncher.launch(requiredImagePermissions())
             return
         }
@@ -95,7 +104,11 @@ class MainActivity : ComponentActivity() {
     }
 
     private fun continueMonitorSetup() {
-        if (!isAccessibilityServiceEnabled()) {
+        val accessibilityEnabled = isAccessibilityServiceEnabled()
+        ScreenshotDiagnosticLog.info(
+            "monitor setup accessibilityEnabled=$accessibilityEnabled",
+        )
+        if (!accessibilityEnabled) {
             try {
                 startActivity(Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS))
                 showToast("ユーザー補助設定でスクショ後 QR 読み取りを有効にしてください")
@@ -130,10 +143,20 @@ class MainActivity : ComponentActivity() {
             contentResolver,
             Settings.Secure.ENABLED_ACCESSIBILITY_SERVICES,
         ).orEmpty()
-        return enabled.split(':').any { it.equals(expected, ignoreCase = true) }
+        val serviceEnabled = enabled.split(':').any {
+            it.equals(expected, ignoreCase = true)
+        }
+        ScreenshotDiagnosticLog.debug(
+            "accessibility service state enabled=$serviceEnabled",
+        )
+        return serviceEnabled
     }
 
     private fun handleText(text: String) {
+        ScreenshotDiagnosticLog.info(
+            "handling QR result type=${BarcodeUtil.getResultType(text)} " +
+                "hasBitmapUri=${intent.parcelable<Uri>(EXTRA_BARCODE_BITMAP) != null}",
+        )
         showToast(text)
         val resultType = BarcodeUtil.getResultType(text)
         val bitmapUri = intent.parcelable<Uri>(EXTRA_BARCODE_BITMAP)
