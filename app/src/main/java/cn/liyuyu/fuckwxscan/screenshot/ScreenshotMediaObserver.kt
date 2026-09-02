@@ -1,6 +1,6 @@
 package cn.liyuyu.fuckwxscan.screenshot
 
-import android.content.ContentObserver
+import android.database.ContentObserver
 import android.content.Context
 import android.graphics.Bitmap
 import android.net.Uri
