@@ -34,6 +34,9 @@
     </queries>
 
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+    <uses-permission
+        android:name="android.permission.WRITE_EXTERNAL_STORAGE"
+        android:maxSdkVersion="28" />
 
     <application
         android:maxAspectRatio="2.2"
@@ -69,6 +72,13 @@
             android:exported="false"
             android:noHistory="true"
             android:taskAffinity="${applicationId}.qr_selection"
+            android:theme="@style/Theme.FuckWxScan.Selection" />
+        <activity
+            android:name=".ui.ScreenshotActionActivity"
+            android:excludeFromRecents="true"
+            android:exported="false"
+            android:noHistory="true"
+            android:taskAffinity="${applicationId}.screenshot_action"
             android:theme="@style/Theme.FuckWxScan.Selection" />
         <service
             android:name=".service.CaptureService"

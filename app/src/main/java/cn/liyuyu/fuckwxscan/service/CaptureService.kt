@@ -23,9 +23,13 @@ import android.widget.Toast
 import androidx.core.app.NotificationCompat
 import cn.liyuyu.fuckwxscan.App
 import cn.liyuyu.fuckwxscan.R
+import cn.liyuyu.fuckwxscan.capture.MediaStoreScreenshotSaver
+import cn.liyuyu.fuckwxscan.capture.TemporaryScreenshotStore
 import cn.liyuyu.fuckwxscan.qr.QrDecoder
-import cn.liyuyu.fuckwxscan.result.QrResultDispatcher
+import cn.liyuyu.fuckwxscan.scan.DecodeDecision
+import cn.liyuyu.fuckwxscan.scan.ScanFlowPolicy
 import cn.liyuyu.fuckwxscan.ui.MainActivity
+import cn.liyuyu.fuckwxscan.ui.ScreenshotActionActivity
 import cn.liyuyu.fuckwxscan.utils.BarcodeUtil
 import cn.liyuyu.fuckwxscan.utils.ScreenUtil
 import kotlinx.coroutines.*
@@ -130,13 +134,31 @@ class CaptureService : Service(), CoroutineScope by MainScope() {
                 val bitmap = BarcodeUtil.imageToBitmap(image)
                 try {
                     val results = withTimeoutOrNull(2000) { QrDecoder.decode(bitmap) }.orEmpty()
-                    val bitmapUri = if (QrResultDispatcher.needsScreenshotFile(results)) {
-                        BarcodeUtil.getBitmapUri(bitmap, this@CaptureService)
-                    } else {
-                        null
-                    }
-                    withContext(Dispatchers.Main) {
-                        QrResultDispatcher(this@CaptureService).dispatch(results, bitmapUri)
+                    when (val decision = ScanFlowPolicy.afterDecode(results.size)) {
+                        DecodeDecision.SaveScreenshot -> saveScreenshot(bitmap)
+                        is DecodeDecision.ShowActionChoice -> {
+                            val temporaryScreenshotResult = TemporaryScreenshotStore(
+                                this@CaptureService,
+                            ).create(bitmap)
+                            if (temporaryScreenshotResult.isFailure) {
+                                val error = temporaryScreenshotResult.exceptionOrNull()
+                                    ?: IllegalStateException("Unable to store temporary screenshot")
+                                Log.e(TAG, "Unable to store temporary screenshot", error)
+                                saveScreenshot(bitmap)
+                                return@launch
+                            }
+                            val screenshotUri = temporaryScreenshotResult.getOrThrow()
+                            withContext(Dispatchers.Main) {
+                                startActivity(
+                                    ScreenshotActionActivity.createIntent(
+                                        context = this@CaptureService,
+                                        results = results,
+                                        screenshotUri = screenshotUri,
+                                    ),
+                                )
+                            }
+                            Log.i(TAG, "QR action choice shown for ${decision.qrCount} result(s)")
+                        }
                     }
                 } finally {
                     bitmap.recycle()
@@ -158,6 +180,21 @@ class CaptureService : Service(), CoroutineScope by MainScope() {
                 captureInProgress = false
                 this@CaptureService.stopSelf()
             }
+        }
+    }
+
+    private suspend fun saveScreenshot(bitmap: android.graphics.Bitmap) {
+        val result = MediaStoreScreenshotSaver(this).save(bitmap)
+        withContext(Dispatchers.Main) {
+            Toast.makeText(
+                this@CaptureService,
+                if (result.isSuccess) {
+                    R.string.screenshot_saved
+                } else {
+                    R.string.screenshot_save_failed
+                },
+                Toast.LENGTH_SHORT,
+            ).show()
         }
     }
 

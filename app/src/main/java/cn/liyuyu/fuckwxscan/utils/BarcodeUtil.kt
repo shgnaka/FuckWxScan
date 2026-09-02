@@ -1,16 +1,11 @@
 package cn.liyuyu.fuckwxscan.utils
 
-import android.content.Context
 import android.graphics.*
 import android.media.Image
-import android.net.Uri
-import androidx.core.content.FileProvider
 import cn.liyuyu.fuckwxscan.data.ResultType
 import com.google.zxing.*
 import com.google.zxing.common.HybridBinarizer
 import com.google.zxing.multi.qrcode.QRCodeMultiReader
-import java.io.File
-import java.io.FileOutputStream
 import java.nio.ByteBuffer
 
 
@@ -106,28 +101,6 @@ object BarcodeUtil {
         val paint = Paint().apply { colorFilter = ColorMatrixColorFilter(cm) }
         Canvas(ret).drawBitmap(bmp, 0f, 0f, paint)
         return ret
-    }
-
-    fun getBitmapUri(bitmap: Bitmap, context: Context): Uri? {
-        val file = File(context.getExternalFilesDir(null), "screenShot.jpg")
-        if (file.exists()) {
-            file.delete()
-        }
-        try {
-            val fos = FileOutputStream(file)
-            bitmap.compress(Bitmap.CompressFormat.JPEG, 100, fos)
-            fos.flush()
-            fos.close()
-        } catch (e: Exception) {
-            e.printStackTrace()
-        }
-        return if (file.exists()) {
-            FileProvider.getUriForFile(
-                context, context.packageName + ".provider", file
-            )
-        } else {
-            null
-        }
     }
 
     fun getResultType(text: String): ResultType {

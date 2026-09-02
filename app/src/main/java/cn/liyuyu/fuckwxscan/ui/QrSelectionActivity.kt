@@ -43,22 +43,56 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.core.view.WindowCompat
 import cn.liyuyu.fuckwxscan.R
+import cn.liyuyu.fuckwxscan.capture.TemporaryScreenshotStore
 import cn.liyuyu.fuckwxscan.data.BarcodeResult
+import cn.liyuyu.fuckwxscan.data.ResultType
 import cn.liyuyu.fuckwxscan.result.ResultHandler
 import cn.liyuyu.fuckwxscan.ui.theme.FuckWxScanTheme
 import cn.liyuyu.fuckwxscan.ui.theme.HintMask
+import cn.liyuyu.fuckwxscan.utils.BarcodeUtil
 import cn.liyuyu.fuckwxscan.utils.ScreenUtil
 import cn.liyuyu.fuckwxscan.utils.parcelable
 import cn.liyuyu.fuckwxscan.utils.parcelableArrayList
 
 class QrSelectionActivity : ComponentActivity() {
+    private var deleteScreenshotOnCancel = false
+
     companion object {
         const val EXTRA_BARCODE_RESULTS = "extra_barcode_results"
         const val EXTRA_BARCODE_BITMAP = "extra_barcode_bitmap"
+        const val EXTRA_DELETE_SCREENSHOT_ON_CANCEL = "extra_delete_screenshot_on_cancel"
+
+        @Volatile
+        var isShowing: Boolean = false
+
+        fun createIntent(
+            context: android.content.Context,
+            results: List<BarcodeResult>,
+            screenshotUri: Uri,
+            deleteScreenshotOnFinish: Boolean,
+        ): android.content.Intent {
+            return android.content.Intent(context, QrSelectionActivity::class.java).apply {
+                putParcelableArrayListExtra(
+                    EXTRA_BARCODE_RESULTS,
+                    ArrayList(results),
+                )
+                putExtra(EXTRA_BARCODE_BITMAP, screenshotUri)
+                putExtra(EXTRA_DELETE_SCREENSHOT_ON_CANCEL, deleteScreenshotOnFinish)
+                flags = android.content.Intent.FLAG_ACTIVITY_NEW_TASK or
+                    android.content.Intent.FLAG_ACTIVITY_CLEAR_TASK or
+                    android.content.Intent.FLAG_ACTIVITY_EXCLUDE_FROM_RECENTS or
+                    android.content.Intent.FLAG_ACTIVITY_NO_ANIMATION or
+                    android.content.Intent.FLAG_GRANT_READ_URI_PERMISSION
+            }
+        }
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        deleteScreenshotOnCancel = intent.getBooleanExtra(
+            EXTRA_DELETE_SCREENSHOT_ON_CANCEL,
+            false,
+        )
         WindowCompat.setDecorFitsSystemWindows(window, false)
         onBackPressedDispatcher.addCallback(this, object : OnBackPressedCallback(true) {
             override fun handleOnBackPressed() {
@@ -72,6 +106,7 @@ class QrSelectionActivity : ComponentActivity() {
             return
         }
 
+        isShowing = true
         val screenshotUri = intent.parcelable<Uri>(EXTRA_BARCODE_BITMAP)
         setContent {
             QrSelectionScreen(
@@ -79,15 +114,28 @@ class QrSelectionActivity : ComponentActivity() {
                 onCancel = ::closeSelection,
                 onSelected = { result ->
                     ResultHandler(this).handle(result.text, screenshotUri)
-                    closeSelection()
+                    if (BarcodeUtil.getResultType(result.text) != ResultType.AlipayUrl) {
+                        TemporaryScreenshotStore(this).delete()
+                    }
+                    closeSelection(deleteTemporaryScreenshot = false)
                 },
             )
         }
     }
 
-    private fun closeSelection() {
+    override fun onDestroy() {
+        isShowing = false
+        super.onDestroy()
+    }
+
+    private fun closeSelection(deleteTemporaryScreenshot: Boolean = deleteScreenshotOnCancel) {
+        if (deleteTemporaryScreenshot) {
+            TemporaryScreenshotStore(this).delete()
+        }
+        isShowing = false
         finishAndRemoveTask()
     }
+
 }
 
 @Composable

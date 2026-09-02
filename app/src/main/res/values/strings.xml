@@ -8,9 +8,9 @@
     <string name="notification_sub_title">画面取得を実行しています</string>
 
     <string name="accessibility_service_name">QR Volume Scanner</string>
-    <string name="accessibility_service_description">音量上ボタンの高速 4 連打、または設定した端末動作で、現在の画面にある QR コードを読み取ります。音量キー操作は消費せず、通常の音量変更も行われます。</string>
+    <string name="accessibility_service_description">音量上ボタンの高速 4 連打、または設定した端末動作で現在の画面を取得します。QR コードがあれば読み取りまたはスクショ保存を選択できます。音量キー操作は消費せず、通常の音量変更も行われます。</string>
     <string name="setup_title">QR Volume Scanner（モーション診断版）</string>
-    <string name="setup_description">音量上ボタンの高速 4 連打、端末を振って戻す操作、または手首をひねって戻す操作で、現在の画面にある QR コードを読み取ります。</string>
+    <string name="setup_description">音量上ボタンの高速 4 連打、端末を振って戻す操作、または手首をひねって戻す操作で現在の画面を取得します。QR コードがあれば読み取りまたはスクショ保存を選択できます。</string>
     <string name="accessibility_status_enabled">ユーザー補助サービス：有効</string>
     <string name="accessibility_status_disabled">ユーザー補助サービス：無効</string>
     <string name="open_accessibility_settings">ユーザー補助設定を開く</string>
@@ -28,6 +28,13 @@
     <string name="legacy_capture_permission_denied">画面取得が許可されませんでした</string>
     <string name="legacy_capture_permission_needed">画面取得の準備が必要です</string>
     <string name="screenshot_failed">画面を取得できませんでした</string>
+    <string name="screenshot_action_choice_title">%1$d 件の QR コードを検出</string>
+    <string name="screenshot_action_choice_description">QR コード検出後の操作を選択</string>
+    <string name="screenshot_action_read_qr">QR を読み取る</string>
+    <string name="screenshot_action_read_failed">QR 読み取りを開始できませんでした</string>
+    <string name="screenshot_action_save">スクショを保存</string>
+    <string name="screenshot_saved">スクショを保存しました</string>
+    <string name="screenshot_save_failed">スクショを保存できませんでした</string>
     <string name="qr_not_found">QR コードが見つかりませんでした</string>
     <string name="cancel">キャンセル</string>
     <string name="qr_selection_overlay_description">複数の QR コードから読み取り対象を選択</string>

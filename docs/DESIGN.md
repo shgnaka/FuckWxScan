@@ -17,7 +17,12 @@
 - API 24〜29 は既存の MediaProjection と CaptureService
 - キャプチャ結果の共通境界は `Bitmap`
 - QR デコードは既存 `BarcodeUtil.decodeQRCode()` を再利用
-- 1 件は即処理、複数件は元アプリの位置選択 UI
+- 画面取得はジェスチャー 1 回につき 1 回だけ行い、取得した同じ画像を QR 読み取りとスクショ保存に使う
+- QR が 0 件なら、選択画面を出さずに取得画像をスクショとして保存
+- QR が 1 件以上なら、「QR を読み取る」と「スクショを保存」の 2 択を表示
+- 「QR を読み取る」は 1 件なら既存の結果処理、複数件なら元アプリの位置選択 UI
+- 「スクショを保存」は取得画像を `Pictures/Screenshots` へ保存し、再キャプチャしない
+- 選択画面の戻る・外側タップ・キャンセルでは、一時画像を削除
 - 自動コピーは設定可能。MVP の暫定初期値は OFF
 - 実験機能として線形加速度による振り判定と、ジャイロによる手首ひねり判定を個別に設定可能
 - 手首ひねりは、一方向への回転、停止、同じ軸の反対方向への回転を短時間に行った場合だけ成立
@@ -34,9 +39,12 @@ QrAccessibilityService
        -> AccessibilityScreenCapture (API 30+)
        -> CaptureService / MediaProjection (API 24-29)
   -> QrDecoder
-  -> QrResultDispatcher
-       -> ResultHandler (0/1件)
-       -> MainActivity (複数選択)
+  -> ScanFlowPolicy
+       -> MediaStoreScreenshotSaver (0件)
+       -> ScreenshotActionActivity (1件以上)
+            -> ResultHandler (1件)
+            -> QrSelectionActivity (複数選択)
+            -> MediaStoreScreenshotSaver (保存)
 ```
 
 ## 元実装からの扱い
@@ -49,7 +57,7 @@ QrAccessibilityService
 | `CaptureService` | API 24〜29 のフォールバックへ限定 |
 | `MainActivity` | 初期設定と複数 QR 選択へ再構成 |
 | `BarcodeResult` と座標 UI | 維持 |
-| FileProvider と画像一時保存 | 複数選択・既存連携のため当面維持 |
+| FileProvider と画像一時保存 | 選択後の保存と Alipay 互換経路のため維持。キャンセル時は削除 |
 | WeChat / Alipay 特殊処理 | MVP では互換経路を維持。実機評価後に再判断 |
 
 ## 実機で確認する事項
@@ -67,11 +75,13 @@ QrAccessibilityService
 
 ## 検証状況と次作業
 
-ローカル JVM 単体テスト、`assembleDebug`、`assembleRelease`、`lintDebug` は完了しています。静的解析はエラー 0 件で、残る 9 件は元実装の WindowInsets 取得と未使用リソースに関する警告です。
+`ScanFlowPolicyTest` は、QR 0 件、1 件、複数件、および各選択肢の分岐を検証します。今回の環境では Gradle 7.4 の配布物を取得できないため、変更後の JVM 単体テストと APK ビルドは未実行です。`git diff --check` と対象コードの静的確認は完了しています。
 
-次は以下を実機で確認します。
+次は以下を実機と CI で確認します。
 
-1. API 30 以降で四連打、スクリーンショット、単一 QR を確認
-2. 複数 QR のマーカー位置と画面回転を確認
-3. API 24〜29 の許可失効条件を確認
-4. timing と UX の調整後、toolchain と targetSdk を別変更で更新
+1. API 30 以降で四連打、スクリーンショット、単一 QR の 2 択を確認
+2. 「QR を読み取る」で既存結果処理、「スクショを保存」で画像アプリから開けることを確認
+3. 複数 QR の選択、戻る、外側タップで一時画像が破棄されることを確認
+4. QR なしで自動保存され、選択画面が出ないことを確認
+5. API 24〜29 の許可失効条件を確認
+6. 実機確認後、必要なら表示文言と保存先を別変更で調整

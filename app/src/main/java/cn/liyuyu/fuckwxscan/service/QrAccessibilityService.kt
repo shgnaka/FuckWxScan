@@ -10,6 +10,7 @@ import android.app.KeyguardManager
 import android.content.Context
 import android.content.Intent
 import android.content.SharedPreferences
+import android.graphics.Bitmap
 import android.hardware.Sensor
 import android.hardware.SensorEvent
 import android.hardware.SensorEventListener
@@ -23,18 +24,20 @@ import android.widget.Toast
 import androidx.core.content.ContextCompat
 import cn.liyuyu.fuckwxscan.App
 import cn.liyuyu.fuckwxscan.R
+import cn.liyuyu.fuckwxscan.capture.MediaStoreScreenshotSaver
 import cn.liyuyu.fuckwxscan.capture.ScreenCaptureFacade
+import cn.liyuyu.fuckwxscan.capture.TemporaryScreenshotStore
 import cn.liyuyu.fuckwxscan.diagnostics.DiagnosticStore
 import cn.liyuyu.fuckwxscan.gesture.ShakeGestureDetector
 import cn.liyuyu.fuckwxscan.gesture.VolumeQuadTapDetector
 import cn.liyuyu.fuckwxscan.gesture.WristTwistGestureDetector
-import cn.liyuyu.fuckwxscan.overlay.MultiQrOverlayController
 import cn.liyuyu.fuckwxscan.qr.QrDecoder
-import cn.liyuyu.fuckwxscan.result.QrResultDispatcher
-import cn.liyuyu.fuckwxscan.result.ResultHandler
+import cn.liyuyu.fuckwxscan.scan.DecodeDecision
+import cn.liyuyu.fuckwxscan.scan.ScanFlowPolicy
 import cn.liyuyu.fuckwxscan.settings.AppPreferences
 import cn.liyuyu.fuckwxscan.ui.MainActivity
-import cn.liyuyu.fuckwxscan.utils.BarcodeUtil
+import cn.liyuyu.fuckwxscan.ui.QrSelectionActivity
+import cn.liyuyu.fuckwxscan.ui.ScreenshotActionActivity
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -51,8 +54,8 @@ class QrAccessibilityService : AccessibilityService(), SensorEventListener,
     private val wristTwistDetector = WristTwistGestureDetector()
     private val serviceScope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
     private val captureFacade by lazy { ScreenCaptureFacade(this) }
-    private val multiQrOverlayControllerDelegate = lazy { MultiQrOverlayController(this) }
-    private val multiQrOverlayController by multiQrOverlayControllerDelegate
+    private val screenshotSaver by lazy { MediaStoreScreenshotSaver(this) }
+    private val temporaryScreenshotStore by lazy { TemporaryScreenshotStore(this) }
     private val appPreferences by lazy { AppPreferences.sharedPreferences(this) }
     private val sensorManager by lazy {
         getSystemService(Context.SENSOR_SERVICE) as SensorManager
@@ -119,9 +122,6 @@ class QrAccessibilityService : AccessibilityService(), SensorEventListener,
         detector.reset()
         shakeDetector.reset()
         wristTwistDetector.reset()
-        if (multiQrOverlayControllerDelegate.isInitialized()) {
-            multiQrOverlayController.dismiss()
-        }
         DiagnosticStore.recordStage(this, "AccessibilityService.onInterrupt")
     }
 
@@ -209,9 +209,7 @@ class QrAccessibilityService : AccessibilityService(), SensorEventListener,
         unregisterShakeSensor()
         unregisterTwistSensor()
         appPreferences.unregisterOnSharedPreferenceChangeListener(this)
-        if (multiQrOverlayControllerDelegate.isInitialized()) {
-            multiQrOverlayController.dismiss()
-        }
+        temporaryScreenshotStore.delete()
         DiagnosticStore.markServiceStopped(this, "サービス破棄（onDestroy）")
         serviceScope.cancel()
         super.onDestroy()
@@ -720,7 +718,7 @@ class QrAccessibilityService : AccessibilityService(), SensorEventListener,
             DiagnosticStore.recordStage(this, "画面取得を省略：処理中")
             return
         }
-        if (multiQrOverlayController.isShowing) {
+        if (ScreenshotActionActivity.isShowing || QrSelectionActivity.isShowing) {
             DiagnosticStore.recordStage(this, "画面取得を省略：選択画面表示中")
             return
         }
@@ -749,50 +747,40 @@ class QrAccessibilityService : AccessibilityService(), SensorEventListener,
                         this@QrAccessibilityService,
                         "QR デコード完了：${results.size} 件",
                     )
-                    val screenshotUri = if (QrResultDispatcher.needsScreenshotFile(results)) {
-                        withContext(Dispatchers.IO) {
-                            BarcodeUtil.getBitmapUri(bitmap, this@QrAccessibilityService)
+                    when (val decision = ScanFlowPolicy.afterDecode(results.size)) {
+                        DecodeDecision.SaveScreenshot -> {
+                            saveScreenshot(bitmap)
                         }
-                    } else {
-                        null
-                    }
-                    if (results.size > 1) {
-                        val overlayShown = multiQrOverlayController.show(
-                            sourceWidth = bitmap.width,
-                            sourceHeight = bitmap.height,
-                            results = results,
-                            onSelected = { result ->
-                                DiagnosticStore.recordStage(
+
+                        is DecodeDecision.ShowActionChoice -> {
+                            val temporaryScreenshotResult = withContext(Dispatchers.IO) {
+                                temporaryScreenshotStore.create(bitmap)
+                            }
+                            if (temporaryScreenshotResult.isFailure) {
+                                val error = temporaryScreenshotResult.exceptionOrNull()
+                                    ?: IllegalStateException("Unable to store temporary screenshot")
+                                Log.e(TAG, "Unable to store temporary screenshot", error)
+                                DiagnosticStore.recordError(
                                     this@QrAccessibilityService,
-                                    "複数 QR 選択完了",
+                                    "一時スクショ保存",
+                                    error,
                                 )
-                                ResultHandler(this@QrAccessibilityService).handle(
-                                    result.text,
-                                    screenshotUri,
-                                )
-                            },
-                        )
-                        if (!overlayShown) {
-                            Toast.makeText(
-                                this@QrAccessibilityService,
-                                R.string.qr_selection_overlay_failed,
-                                Toast.LENGTH_SHORT,
-                            ).show()
-                            DiagnosticStore.recordStage(
-                                this@QrAccessibilityService,
-                                "複数 QR 選択オーバーレイ表示失敗",
+                                saveScreenshot(bitmap)
+                                return@launch
+                            }
+                            val screenshotUri = temporaryScreenshotResult.getOrThrow()
+                            startActivity(
+                                ScreenshotActionActivity.createIntent(
+                                    context = this@QrAccessibilityService,
+                                    results = results,
+                                    screenshotUri = screenshotUri,
+                                ),
                             )
-                        } else {
                             DiagnosticStore.recordStage(
                                 this@QrAccessibilityService,
-                                "複数 QR 選択オーバーレイ表示：${results.size} 件",
+                                "QR 選択パネル表示：${decision.qrCount} 件",
                             )
                         }
-                    } else {
-                        QrResultDispatcher(this@QrAccessibilityService).dispatch(
-                            results,
-                            screenshotUri,
-                        )
                     }
                     DiagnosticStore.recordStage(this@QrAccessibilityService, "結果処理完了")
                 } finally {
@@ -807,6 +795,27 @@ class QrAccessibilityService : AccessibilityService(), SensorEventListener,
                 scanInProgress = false
             }
         }
+    }
+
+    private suspend fun saveScreenshot(bitmap: Bitmap) {
+        val result = withContext(Dispatchers.IO) {
+            screenshotSaver.save(bitmap)
+        }
+        withContext(Dispatchers.Main) {
+            Toast.makeText(
+                this@QrAccessibilityService,
+                if (result.isSuccess) {
+                    R.string.screenshot_saved
+                } else {
+                    R.string.screenshot_save_failed
+                },
+                Toast.LENGTH_SHORT,
+            ).show()
+        }
+        DiagnosticStore.recordStage(
+            this@QrAccessibilityService,
+            if (result.isSuccess) "スクショ保存完了" else "スクショ保存失敗",
+        )
     }
 
     private fun triggerLegacyCapture() {
