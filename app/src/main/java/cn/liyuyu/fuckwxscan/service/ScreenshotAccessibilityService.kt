@@ -124,6 +124,7 @@ class ScreenshotAccessibilityService : AccessibilityService() {
             }
         }
     }
+
     private fun startQrReadFlow(
         media: ScreenshotMediaMetadata,
         results: List<BarcodeResult>,
@@ -158,20 +159,6 @@ class ScreenshotAccessibilityService : AccessibilityService() {
                         "QR result activity could not be started mediaId=${media.id}",
                         e,
                     )
-                    android.widget.Toast.makeText(
-                        this,
-                        "QR 読み取り画面を開けませんでした",
-                        android.widget.Toast.LENGTH_SHORT,
-                    ).show()
-                }
-            }
-        }
-    }
-}
-}
-                try {
-                    startActivity(intent)
-                } catch (_: Exception) {
                     android.widget.Toast.makeText(
                         this,
                         "QR 読み取り画面を開けませんでした",
