@@ -57,5 +57,9 @@ object ScreenshotQrFlowPolicy {
             }
         }
 
-    fun shouldDeleteOriginalScreenshot(action: ScreenshotAction): Boolean = false
+    fun shouldDeleteOriginalScreenshot(action: ScreenshotAction): Boolean =
+        when (action) {
+            ScreenshotAction.READ_QR -> false
+            ScreenshotAction.KEEP_SCREENSHOT -> false
+        }
 }

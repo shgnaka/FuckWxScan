@@ -27,6 +27,7 @@ class ScreenshotObservationCoordinator(
         nowMs: Long,
         attempt: Int = 0,
     ): ScreenshotObservationAction {
+        require(attempt >= 0)
         val key = media.stableKey
         if (key in terminalKeys) {
             return ScreenshotObservationAction.IGNORE
