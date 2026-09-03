@@ -47,23 +47,27 @@
         android:theme="@style/Theme.FuckWxScan"
         tools:targetApi="31">
         <activity
-            android:name=".ui.MainActivity"
+            android:name=".ui.ScreenshotDiagnosticsActivity"
             android:excludeFromRecents="true"
             android:exported="true"
             android:theme="@style/Theme.FuckWxScan">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
-
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
+        </activity>
 
+        <activity
+            android:name=".ui.MainActivity"
+            android:excludeFromRecents="true"
+            android:exported="true"
+            android:theme="@style/Theme.FuckWxScan">
             <meta-data
                 android:name="android.app.lib_name"
                 android:value="" />
         </activity>
 
-        <!-- Kept for the old explicit-capture entry point; the new launcher path
-             uses the system screenshot and MediaStore observer instead. -->
+        <!-- Kept for the old explicit-capture entry point. -->
         <service
             android:name=".service.CaptureService"
             android:foregroundServiceType="mediaProjection" />
