@@ -4,7 +4,7 @@ on:
   push:
     branches:
       - feature/system-screenshot-qr-choice
-      - feature/screenshot-qr-diagnostics
+      - chore/screenshot-qr-diagnostic-logging
   pull_request:
 
 permissions:
