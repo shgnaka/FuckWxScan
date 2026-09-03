@@ -17,9 +17,10 @@
 ## 初回設定
 
 1. アプリを起動します。
-2. 「写真と動画」への読み取りを許可します。
+2. 起動画面の「ユーザー補助設定を開く」から設定を開きます。
 3. ユーザー補助設定で「スクショ後 QR 読み取り」を有効にします。
-4. 対象画面へ戻り、端末標準のスクリーンショットを実行します。
+4. 起動画面でユーザー補助サービスが「有効」になったことを確認します。
+5. 対象画面へ戻り、端末標準のスクリーンショットを実行します。
 
 設定後はアプリを前面に出しておく必要はありません。ユーザー補助サービスが接続中で、読み取り権限が有効な状態で使用してください。
 
@@ -37,32 +38,33 @@
 - `FLAG_SECURE` で保護された画面は Android の仕様上スクショ自体を取得できません。
 - ユーザー補助サービスが停止・無効化された場合は監視されません。
 
+## 実機での診断
+
+アプリを起動すると、診断画面が表示されます。ここで次を端末だけで確認できます。
+
+- ユーザー補助サービスと画像読み取り権限の状態
+- 保存された診断ログ
+- ログの更新、コピー、消去
+
+ログはアプリ内部の `screenshot-qr-diagnostics.log` に保存され、直近 1000 行だけを保持します。QR の内容自体は保存・表示しません。アプリをアンインストールするとログも消えます。
+
+スクリーンショットを撮った後、アプリを開いて「更新」を押してください。次の順序を確認できます。
+
+1. `Accessibility service connected`
+2. `MediaStore observer registered`
+3. `MediaStore onChange`
+4. `MediaStore row`
+5. `bitmap loaded`
+6. `QR decode finished`
+7. `choice overlay result=true`
+
+QR が見つからない場合は、`no QR detected; choice overlay not shown` と記録されます。QR の内容自体はログに記録しません。
+
 ## 開発
 
-ブランチ `feature/system-screenshot-qr-choice` の CI で、次を実行します。
+`chore/screenshot-qr-diagnostic-logging` の CI で、次を実行します。
 
 ```text
 testDebugUnitTest
 assembleDebug
 ```
-
-
-## 診断ログ
-
-実機で反応しない場合は、 ` ScreenshotQr ` タグのログを確認します。
-
-```text
-adb logcat -v time -s ScreenshotQr:D *:S
-```
-
-正常な場合は、次の順で記録されます。
-
-1. ` Accessibility service connected `
-2. ` MediaStore observer registered `
-3. ` MediaStore onChange `
-4. ` MediaStore row `
-5. ` bitmap loaded `
-6. ` QR decode finished `
-7. ` choice overlay result=true `
-
-QR の内容自体はログに記録しません。
