@@ -13,6 +13,7 @@ import android.provider.Settings
 import android.widget.Toast
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -34,30 +35,39 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.core.content.ContextCompat
-import cn.liyuyu.fuckwxscan.R
 import cn.liyuyu.fuckwxscan.screenshot.ScreenshotDiagnosticLog
 import cn.liyuyu.fuckwxscan.service.ScreenshotAccessibilityService
 import cn.liyuyu.fuckwxscan.ui.theme.FuckWxScanTheme
 
 class ScreenshotDiagnosticsActivity : ComponentActivity() {
     private var logText by mutableStateOf("診断ログを読み込んでいます。")
+    private var accessibilityEnabled by mutableStateOf(false)
+    private var imagePermissionGranted by mutableStateOf(false)
+
+    private val imagePermissionLauncher = registerForActivityResult(
+        ActivityResultContracts.RequestPermission(),
+    ) { granted ->
+        ScreenshotDiagnosticLog.info("image permission result granted=$granted")
+        refreshState()
+    }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        refreshLogs()
+        refreshState()
         setContent {
             FuckWxScanTheme {
                 Surface(modifier = Modifier.fillMaxSize()) {
                     DiagnosticsContent(
                         logText = logText,
-                        accessibilityEnabled = isAccessibilityServiceEnabled(),
-                        imagePermissionGranted = hasImageReadPermission(),
-                        onRefresh = { refreshLogs() },
+                        accessibilityEnabled = accessibilityEnabled,
+                        imagePermissionGranted = imagePermissionGranted,
+                        onRefresh = { refreshState() },
                         onClear = {
                             ScreenshotDiagnosticLog.clear(this)
-                            refreshLogs()
+                            refreshState()
                         },
                         onCopy = { copyLogs() },
+                        onRequestImagePermission = { requestImagePermission() },
                         onOpenAccessibilitySettings = { openAccessibilitySettings() },
                     )
                 }
@@ -67,11 +77,17 @@ class ScreenshotDiagnosticsActivity : ComponentActivity() {
 
     override fun onResume() {
         super.onResume()
-        refreshLogs()
+        refreshState()
     }
 
-    private fun refreshLogs() {
+    private fun refreshState() {
         logText = ScreenshotDiagnosticLog.read(this)
+        accessibilityEnabled = isAccessibilityServiceEnabled()
+        imagePermissionGranted = hasImageReadPermission()
+    }
+
+    private fun requestImagePermission() {
+        imagePermissionLauncher.launch(requiredImagePermission())
     }
 
     private fun copyLogs() {
@@ -84,15 +100,18 @@ class ScreenshotDiagnosticsActivity : ComponentActivity() {
         startActivity(Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS))
     }
 
-    private fun hasImageReadPermission(): Boolean {
-        val permission = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+    private fun requiredImagePermission(): String =
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
             Manifest.permission.READ_MEDIA_IMAGES
         } else {
             Manifest.permission.READ_EXTERNAL_STORAGE
         }
-        return ContextCompat.checkSelfPermission(this, permission) ==
-            PackageManager.PERMISSION_GRANTED
-    }
+
+    private fun hasImageReadPermission(): Boolean =
+        ContextCompat.checkSelfPermission(
+            this,
+            requiredImagePermission(),
+        ) == PackageManager.PERMISSION_GRANTED
 
     private fun isAccessibilityServiceEnabled(): Boolean {
         val expected = ComponentName(
@@ -115,6 +134,7 @@ private fun DiagnosticsContent(
     onRefresh: () -> Unit,
     onClear: () -> Unit,
     onCopy: () -> Unit,
+    onRequestImagePermission: () -> Unit,
     onOpenAccessibilitySettings: () -> Unit,
 ) {
     Column(
@@ -129,8 +149,8 @@ private fun DiagnosticsContent(
         Spacer(modifier = Modifier.height(8.dp))
         Text("この画面は端末だけで診断ログを確認するためのものです。")
         Spacer(modifier = Modifier.height(12.dp))
-        Text("ユーザー補助サービス: ${if (accessibilityEnabled) "有効" else "無効"}")
-        Text("写真と動画の読み取り: ${if (imagePermissionGranted) "許可済み" else "未許可"}")
+        Text("ユーザー補助サービス: " + if (accessibilityEnabled) "有効" else "無効")
+        Text("写真と動画の読み取り: " + if (imagePermissionGranted) "許可済み" else "未許可")
         Spacer(modifier = Modifier.height(12.dp))
         Row(
             modifier = Modifier.fillMaxWidth(),
@@ -147,6 +167,15 @@ private fun DiagnosticsContent(
             }
         }
         Spacer(modifier = Modifier.height(8.dp))
+        if (!imagePermissionGranted) {
+            Button(
+                onClick = onRequestImagePermission,
+                modifier = Modifier.fillMaxWidth(),
+            ) {
+                Text("写真と動画を許可")
+            }
+            Spacer(modifier = Modifier.height(8.dp))
+        }
         Button(
             onClick = onOpenAccessibilitySettings,
             modifier = Modifier.fillMaxWidth(),
